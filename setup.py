@@ -30,13 +30,13 @@ setuptools.setup(name='cova',
             'PyQt5',
         	'joblib>=0.14.0'
         ],
-        #test_suite='nose.collector',
-    	#tests_require=['nose'],
+        test_suite='nose.collector',
+    	tests_require=['nose'],
         package_dir={'cova':'cova'},
-        #package_data={'cova':['data/*','testdata/*']},
+        package_data={'cova':['data/*','testdata/*']},
         include_package_data=True,
         zip_safe=False,
-        #entry_points = {
-        #'console_scripts': ['CoVa=cova.command_line:cli'],
-    #}
+        entry_points = {
+        'console_scripts': ['CoVa=cova.command_line:cli'],
+    }
     )

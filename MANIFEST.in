@@ -1,0 +1,5 @@
+include README.rst
+include cova/data/*
+include cova/testdata/*
+recursive-include tests
+recursive-exclude __pycache__  *.pyc *.pyo *.orig

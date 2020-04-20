@@ -1,0 +1,4 @@
+genome	#variants	#shared	#unique	shared	unique
+MT188341	13	0	5		orf8_L84S,helicase_Y541C,helicase_P504L,nsp3_S1106G,methyltransferase_S243F
+MT184911	4	0	2		nsp3_T127I,nsp6_L37F
+MT039890	9	0	6		ORF3a_W128L,E_L37H,S_S221W,methyltransferase_T93M,ORF3a_G251V,nsp3_M84I
