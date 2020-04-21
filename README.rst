@@ -127,7 +127,7 @@ CoVa has multiple subcommands, and these commands have their own arguments. To s
 
    CoVa msabuild --help
    
-You can run these commands individually or in combination, with or without arguments, as all arguments have defaults. Combination works like this
+You can run these commands individually or in combination, with or without arguments, as all arguments have defaults. Combination works like this.
 
 .. code-block:: bash
 
@@ -144,3 +144,5 @@ which is equivalent to
 .. code-block:: bash
    
    CoVa msabuild msaref msaunq msap vcalpd annpv vcali div tree sel tabvs   
+
+To get familiar with these commands, and their outputs, you can run CoVa on ``<path-to-cova-repo>/example`` directory. You can also copy the input file from this directory into an empty directory of your choce, for a fresh run. 
