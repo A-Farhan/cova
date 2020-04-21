@@ -6,6 +6,7 @@ def readme():
 
 setuptools.setup(name='cova',
         version='0.0.1',
+        license='MIT License',
         author='Farhan Ali',
         author_email='afarhan@ncbs.res.in',
         description='coronavirus variant analysis (simplified)',
@@ -33,7 +34,7 @@ setuptools.setup(name='cova',
         test_suite='nose.collector',
     	tests_require=['nose'],
         package_dir={'cova':'cova'},
-        package_data={'cova':['data/*','testdata/*']},
+        package_data={'cova':['data/','testdata/', 'softwares/']},
         include_package_data=True,
         zip_safe=False,
         entry_points = {

@@ -1,5 +1,6 @@
 include README.rst
-include cova/data/*
 include cova/testdata/*
-recursive-include tests
+include cova/data/*
+include cova/softwares/bin/*
+graft cova/softwares/lib/
 recursive-exclude __pycache__  *.pyc *.pyo *.orig
