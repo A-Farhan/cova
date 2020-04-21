@@ -1,5 +1,5 @@
 import os, re, subprocess, matplotlib, seaborn, ete3
-from . import _utils, FEATURETABLE, GENOME, PROTNAMES, LIBPATH 
+from . import _utils, FEATURETABLE, GENOME, PROTNAMES
 from time import time
 from Bio import SeqIO, AlignIO
 from Bio.Align import MultipleSeqAlignment
@@ -309,7 +309,7 @@ proceed and overwrite OR with [n] to skip this protein and retain the MSA file''
 	# cache file
 	fcout = os.path.join( outdr, p+'.cache')
 
-	cmd = [ prog, 'fubar', 'LIBPATH='+LIBPATH, '--alignment', fmsa, '--tree', ftree, '--cache', fcout]
+	cmd = [ prog, 'fubar', '--alignment', fmsa, '--tree', ftree, '--cache', fcout]
 	print("Command: %s"%' '.join(cmd))
 	with open(fsout,'w') as flob:
 		s = subprocess.run(cmd, stdout=flob)	

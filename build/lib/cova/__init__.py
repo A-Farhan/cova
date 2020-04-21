@@ -1,8 +1,6 @@
 """Coronavirus Variant analysis"""
 import pkg_resources, os
 
-PROGPATH = pkg_resources.resource_filename('cova', 'softwares/bin')
-LIBPATH =  pkg_resources.resource_filename('cova', 'softwares/lib/hyphy')
 DATAPATH = pkg_resources.resource_filename('cova', 'data')
 
 from . import _utils

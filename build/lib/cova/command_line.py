@@ -32,7 +32,7 @@ def cli(ctx,indr,ref,ncpu,debug):
 
 @cli.command()
 @click.pass_context
-@click.option('--prog', default=os.path.join(cova.PROGPATH,'mafft'), 
+@click.option('--prog', default='mafft', 
 	help='''full path to MAFFT program''',show_default=True)
 @click.option('--infile', default='genomes.fna', show_default=True)
 @click.option('--outfile', default='genome_aln.fna', show_default=True)
@@ -315,7 +315,7 @@ proceed and overwrite OR with [n] to terminate this command''')
 
 @cli.command()
 @click.pass_context
-@click.option('--prog', default=os.path.join(cova.PROGPATH,'FastTree'), 
+@click.option('--prog', default='FastTree', 
 	help='''full path to FASTTREE program''', show_default=True)
 @click.option('--infile', default='genome_aln_ref.fna', show_default=True)
 @click.option('--outfile', default='genomes.nwk', show_default=True)
@@ -380,7 +380,7 @@ proceed and overwrite OR with [n] to terminate this command''')
 
 @cli.command()
 @click.pass_context
-@click.option('--prog', default=os.path.join(cova.PROGPATH,'hyphy'),
+@click.option('--prog', default='hyphy',
 	help='''full path to HYPHY program''', show_default=True)
 @click.option('--indr', default='prots_nmsa', show_default=True)
 @click.option('--tree', default='genomes.nwk', show_default=True)
@@ -401,7 +401,7 @@ def sel(ctx,prog,tree,indr,outdr,outr,outs):
 		os.mkdir(dout)
 	
 	# check if hyphy can find its batch files
-	cmd = [prog, 'fubar', 'LIBPATH='+cova.LIBPATH, '--help']
+	cmd = [prog, 'fubar', '--help']
 	s = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
 	if s.returncode != 0:
 		raise FileNotFoundError("Hyphy couldn't find where FUBAR is. Check library path")

@@ -10,3 +10,6 @@
 
 # virtual environment
 .venv/
+
+# directory with external softwares
+/cova/softwares/
