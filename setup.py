@@ -12,7 +12,7 @@ setuptools.setup(name='cova',
         description='coronavirus variant analysis (simplified)',
         keywords='variants diversity selection phylogeny coronavirus covid19',
         long_description=readme(),
-        url='https://bitbucket.org/Farhan_Bugbears/cova',
+        url='https://github.com/A-Farhan/cova',
         packages=setuptools.find_packages(),
         classifiers=[
             "Programming Language :: Python :: 3",

@@ -523,7 +523,7 @@ class MSA(object):
         """
         Remove duplicate sequences from the MSA.
 
-        Optional arguments:
+        Optional arguments:                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
         - ref - reference accession [ None ]
 
         If reference is not provided, input is the original biopython MSA
@@ -538,19 +538,28 @@ class MSA(object):
         unqrec = []
         # set of sequences seen
         seenseqs = set()
+        
         for i in old_msa:
             if str(i.seq) not in seenseqs:
                 unqrec.append(i)
             seenseqs.add( str(i.seq))
             
         new_msa = MultipleSeqAlignment(records=unqrec)
-        return new_msa
+        
+        # nested list of identical records
+        genome_dups = []
+        for rec in new_msa:
+            idenrecs = [ self.ids[x] for x,i in enumerate(old_msa) if i.id != rec.id \
+                and i.seq == rec.seq]
+            if len(idenrecs) > 0:
+                genome_dups.append( [rec.id, ','.join(idenrecs)])
+        return ( new_msa, genome_dups)
     
     def ins(self,ref,ambt=10,chars='ACGT-',header=False):
         """
         Identify positions and sequence of insertions across variants relative to a given reference.
         
-        Arguments:
+            Arguments:
         - ref     - reference accession
         - ambt    - ambiguous characters threshold,                 [ 10 (%) ]
                     used both to check sequence quality,

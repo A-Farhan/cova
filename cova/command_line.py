@@ -1,4 +1,4 @@
-import cova, os, sys, click, subprocess, time
+import cova, os, sys, shutil, click, subprocess, time
 from cova import _utils
 from Bio import AlignIO
 
@@ -8,12 +8,13 @@ start = time.time()
 ### commands ###
 @click.group(chain=True)
 @click.version_option()
-@click.option('--debug', is_flag=True)
-@click.option('--indr', default=os.getcwd(), type=click.Path())
-@click.option('--ref', default='NC_045512', show_default=True)
-@click.option('--ncpu', default='4', show_default=True, type=str)
+@click.option('--indr', help='Full path to the working directory', default=os.getcwd(), type=click.Path())
+@click.option('--ref', help='Reference accession', default='NC_045512', show_default=True)
+@click.option('--ncpu', default=4, show_default=True, type=int)
+@click.option('--debug', help='See full traceback for errors', is_flag=True)
+@click.option('--addseq', help='Add new sequences and redo analysis', is_flag=True)
 @click.pass_context
-def cli(ctx,indr,ref,ncpu,debug):
+def cli(ctx,indr,ref,ncpu,debug,addseq):
 	"""
 	Variant analysis using whole-genome Multiple Sequence Alignments.
 	By default, it works on the current directory. Directory can be specified using INDR option.
@@ -21,7 +22,8 @@ def cli(ctx,indr,ref,ncpu,debug):
 	ctx.ensure_object(dict)
 	ctx.obj['DR'] = indr
 	ctx.obj['REF'] = ref
-	ctx.obj['NCPU'] = ncpu
+	ctx.obj['NCPU'] = str(ncpu)
+	ctx.obj['ADDSEQ'] = addseq
 	# control traceback
 	if debug:
 		ctx.obj['DEBUG'] = debug
@@ -65,7 +67,40 @@ and overwrite OR with [n] to terminate this command''')
 	else:
 		print("okay! Existing output retained.")
 	print("%s:\tMSABUILD is done."%_utils.timer(start))
-			
+
+@cli.command()
+@click.pass_context
+@click.option('--prog', default='mafft', 
+	help='''full path to MAFFT program''',show_default=True)
+@click.option('--inmsa', default='genome_aln.fna', show_default=True)
+@click.option('--newseq', default='new_seq.fna', show_default=True)
+@click.option('--oldcopy', default='old_genome_aln.fna', show_default=True)
+def msad(ctx,prog,inmsa,newseq,oldcopy):
+	"""Add new sequence(s) to a pre-existing whole-genome MSA.""" 
+	fin1 = os.path.join(ctx.obj['DR'],inmsa)
+	fin2 = os.path.join(ctx.obj['DR'],newseq)
+	fout = fin1
+	fcopy = os.path.join(ctx.obj['DR'],oldcopy)
+	
+	if not os.path.exists(fin1):
+		raise FileNotFoundError("couldn't read the input file %s."%fin1)
+
+	if not os.path.exists(fin2):
+		raise FileNotFoundError("couldn't read the input file %s."%fin2)
+
+	# first, copy the original file
+	print("Generating backup for the original MSA")
+	shutil.copy(src=fin1, dst=fcopy)
+	# then run the addseq command
+	cmd = [prog, '--quiet', '--nomemsave', '--maxiterate', '5', '--thread', ctx.obj['NCPU'],\
+	 	'--add', fin2, fcopy]
+	print("%s: Adding sequences from %s to %s,\n Command: %s,\n Output will be saved to %s"%(\
+		_utils.timer(start),fin2, fcopy,' '.join(cmd),fout))
+	# rewrite MSA file
+	with open( fout,'w') as flob:
+		s1 = subprocess.run( cmd, stdout=flob)
+	print("%s:\tMSAD is done."%_utils.timer(start))
+
 @cli.command()
 @click.pass_context
 @click.option('--infile',default='genome_aln.fna',show_default=True)
@@ -103,19 +138,22 @@ proceed and overwrite OR with [n] to terminate this command''')
 @cli.command()
 @click.pass_context
 @click.option('--infile', default='genome_aln_ref.fna', show_default=True)
-@click.option('--outfile',default='genome_aln_unq.fna', show_default=True)
-def msaunq( ctx, infile, outfile):
+@click.option('--outfile1',default='genome_aln_unq.fna', show_default=True)
+@click.option('--outfile2',default='genome_dups.tsv', show_default=True)
+
+def msaunq( ctx, infile, outfile1, outfile2):
 	"""Remove duplicate sequences from reference-limited MSA."""
 	fin = os.path.join(ctx.obj['DR'], infile)
-	fout = os.path.join(ctx.obj['DR'],outfile)
-	
+	fout1 = os.path.join(ctx.obj['DR'],outfile1)
+	fout2 = os.path.join(ctx.obj['DR'],outfile2)
+
 	if not os.path.exists(fin):
 		raise FileNotFoundError("couldn't read the input file %s."%fin)
 	
 	action = True
-	if os.path.exists(fout):
+	if os.path.exists(fout1):
 		response=input('''output file %s already exists. 
-Do you want to proceed and rewrite it? [y/n]\n'''%fout)
+Do you want to proceed and rewrite it? [y/n]\n'''%fout1)
 		if response == 'n':
 			action = False
 		elif response == 'y':
@@ -127,8 +165,9 @@ proceed and overwrite OR with [n] to terminate this command''')
 	if action:
 		msa = _utils.MSA(fname=fin)
 		print("%s: Removing duplicate sequences from the MSA\n"%_utils.timer(start))
-		out = msa.rmdup(ref=ctx.obj['REF'])
-		AlignIO.write(alignments=[out], handle=fout, format='fasta')
+		out1, out2 = msa.rmdup(ref=ctx.obj['REF'])
+		AlignIO.write(alignments=[out1], handle=fout1, format='fasta')
+		_utils.writecsv(fl=fout2, data=out2, sep='\t')
 	else:
 		print("okay! Existing output retained.")
 	print("%s:\tMSAUNQ is done."%_utils.timer(start))
@@ -244,7 +283,7 @@ proceed and overwrite OR with [n] to terminate this command''')
 @click.option('--infile',default='genome_aln.fna',show_default=True)
 @click.option('--outfile',default='insertions.tsv',show_default=True)
 def vcali(ctx,infile,outfile):
-	"""Call variants ( insertions ) from Reference-limited MSA."""
+	"""Call variants ( insertions ) from MSA."""
 	fin = os.path.join(ctx.obj['DR'], infile)
 	fout = os.path.join(ctx.obj['DR'],outfile)
 
@@ -437,6 +476,26 @@ def tabvs(ctx,infile1,infile2,outfile):
 def full(ctx):
 	"""Run full pipeline."""
 	ctx.forward(msabuild)
+	
+	# if new sequences are to be added
+	if ctx.obj['ADDSEQ']:
+		# add new sequences
+		ctx.forward(msad)
+		# clean up
+		dr = ctx.obj['DR']
+		fls = ['genome_aln_ref.fna', 'genome_aln_unq.fna','genome_dups.tsv','prots_nmsa',\
+		'point_mutations.tsv','deletions.tsv','prot_point_mutations_annotated.tsv','insertions.tsv',\
+		'divs.tsv','genomes.nwk','genomes_tree.png','fubar','rates.csv','sites.csv',\
+		'genome_variants.tsv']
+		print("%s:Deleting pre-existing analysis files"%_utils.timer(start))
+		for f in fls:
+			fp = os.path.join( dr, f)
+			if os.path.exists(fp):
+				if os.path.isdir(fp):
+					shutil.rmtree(fp)
+				else:
+					os.remove(fp)
+		print('\t Done with cleanup.')
 	ctx.forward(msaref)
 	ctx.forward(msaunq)
 	ctx.forward(msap)

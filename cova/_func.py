@@ -107,24 +107,37 @@ def annotate_var(fin,fout,ft=FEATURETABLE,genome=GENOME,codon_table=codon_table[
 	"""
 	# list of stop codons
 	stopc = codon_table.stop_codons
-	# data
-	head, vt = _utils.readcsv(fl=fin,sep='\t',header=True) # variant table
+	# point mutations variant table
+	head, vartab = _utils.readcsv(fl=fin,sep='\t',header=True) 
+	# list of genomes
+	genomes = head[2:]
 	# subset feature table to columns of interest
 	prot_ftrs = { i[10]:[ int(i[7]), int(i[8]), i[13]] for i in ft if i[0] in ['CDS','mat_peptide'] \
 				and 'polyprotein' not in i[13]}
 
-	## dict of proteins and their variants
-	prot_vrs = {}
-	for prot,ftrs in prot_ftrs.items():
-		als = []
-		for j in vt:
-			# 1-indexed variant position
-			pos = int(j[0])
-			if ftrs[0] <= pos <= ftrs[1]:
-				entry = [ pos, j[1], set(k for k in j[2:] if k != j[1])]
-				als.append(entry)
-		if len(als) > 0:
-			prot_vrs[prot] = als
+	## dict of proteins variants and genomes
+	var_genomes = {}
+	# for every row in the variant table
+	for row in vartab:
+		# 1-indexed variant position
+		pos = int(row[0])
+		# reference base
+		rb = row[1]
+		# find the affected protein(s)
+		prots = [ k for k,v in prot_ftrs.items() if v[0] <= pos <= v[1] ]
+		if len(prots) == 0:
+			continue
+
+		# set of tuples( prot, pos, ref, var nuc)
+		pprn = set( ( prot, pos, rb, i) for i in row[2:] if i != rb for prot in prots)
+		# dict with above tuples as keys and list of genome ids as their values
+		entry = { k:[ genomes[x] for x,i in enumerate(row[2:]) if i == k[3] ] for k in pprn}
+		var_genomes.update(entry)
+
+	# list of all variant tuples
+	vtups = list(var_genomes.keys())
+	# dict of protein and their variants
+	prot_vrs = _utils.split_data(data=vtups, ix=0, cixs=[0,1,2,3])
 
 	# initialize output table
 	out = []
@@ -148,15 +161,14 @@ def annotate_var(fin,fout,ft=FEATURETABLE,genome=GENOME,codon_table=codon_table[
 		except _utils.LenSeqError:
 			print("\tsequence of {} is not a multiple of 3 ( invalid CDS).".format(ftrs[2].upper()))
 			continue
-
+		# remove the terminal stop codon, if present
 		if codonls[-1] in stopc:
 			codonls = codonls[:-1]
 
 		# for every variant position
 		for nvp in vrs:
 			# 0-index of the genome position
-			genome_x = nvp[0]-1
-			
+			genome_x = nvp[1]-1
 			# corresponding index in the CDS
 			if prot == rfs_prot:
 				if genome_x < (rfs_pos-1):
@@ -165,15 +177,15 @@ def annotate_var(fin,fout,ft=FEATURETABLE,genome=GENOME,codon_table=codon_table[
 					cds_x = genome_x - b - rfs_type
 			else:
 					cds_x = genome_x - b
-
-			# for every nucleotide variant at this position
-			for nv in nvp[2]:
-				# amino acid variant
-				av = _utils.nv2av(p=cds_x, v=nv, seq=codonls, codon_table=codon_table)
-				entry = [ [ prot, ftrs[2], nvp[0], nv] + i for i in av]
-				out.extend(entry)
-		
-	head = ['protein_id', 'name', 'genomic position','variant','old_codon','new_codon','aa_change']
+			# list of amino acid variant(s)
+			avs = _utils.nv2av(p=cds_x, v=nvp[3], seq=codonls, codon_table=codon_table)
+			# make an entry in the output table
+			entry = [ [ prot, ftrs[2] ] + nvp[1:] + i + [','.join(var_genomes[tuple(nvp)])]\
+				for i in avs]
+			out.extend(entry)
+	
+	head = ['protein_id', 'name', 'position', 'ref_base', 'variant_base',\
+			'old_codon','new_codon','aa_change', 'genomes']
 	_utils.writecsv(fl=fout,data=out, header=head,sep='\t')
 
 def plottree(ftree,fplot,fmap=None):
@@ -346,9 +358,7 @@ proceed and overwrite OR with [n] to skip this protein and retain the MSA file''
 	if not action:
 		print("okay! Exiting.")
 		return
-	else:
-		print("okay! Proceeding with rewriting")		
-	
+			
 	# initialize lists for rates ans sites output tables
 	rates_out = []
 	sites_out = []
@@ -395,8 +405,8 @@ proceed and overwrite OR with [n] to skip this protein and retain the MSA file''
 	rates_out = [ i + [ round(i[-1]-i[-2],3)] for i in rates_out]
 	rates_out = sorted( rates_out, key=lambda x: x[-1], reverse=True)
 	# write both tables to files
-	_utils.writecsv(fl=frout, data=rates_out, header=['protein', 'exp subs','syn', 'nonsyn', 'dnds'])
-	_utils.writecsv(fl=fsout, data=sites_out, header=['protein','site','syn', 'nonsyn', 'post. prob'])
+	_utils.writecsv(fl=frout, data=rates_out, header=['protein', 'exp_subs','syn', 'nonsyn', 'dnds'])
+	_utils.writecsv(fl=fsout, data=sites_out, header=['protein','site','syn', 'nonsyn', 'post_prob'])
 
 def genome_var(fpm,fann,fout):
 	"""
@@ -428,8 +438,6 @@ proceed and overwrite OR with [n] to terminate this command''')
 	if not action:
 		print("okay! Exiting.")
 		return
-	else:
-		print("okay! Proceeding with rewriting")
 
 	head_vtab, vtab = _utils.readcsv( fl=fpm, sep='\t', header=True)
 	head_van, van = _utils.readcsv( fl=fann, sep='\t', header=True)
