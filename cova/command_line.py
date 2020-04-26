@@ -59,11 +59,16 @@ Do you want to proceed and rewrite it? [y/n]\n'''%fout)
 and overwrite OR with [n] to terminate this command''')
 	
 	if action:
+		# set path variable to find mafft
+		my_env = os.environ
+		if 'COVA_BIN_PATH' in my_env.keys():
+			my_env['PATH'] = ':'.join([ my_env['COVA_BIN_PATH'], my_env['PATH']])
+
 		cmd = [prog, '--quiet', '--nomemsave', '--maxiterate', '5', '--thread', ctx.obj['NCPU'], fin]
 		print("%s: Building MSA from %s,\n Command: %s,\n Output will be saved to %s"%(\
 			_utils.timer(start),fin,' '.join(cmd),fout))
 		with open( fout,'w') as flob:
-			s1 = subprocess.run( cmd, stdout=flob)
+			s1 = subprocess.run( cmd, stdout=flob, env=my_env)
 	else:
 		print("okay! Existing output retained.")
 	print("%s:\tMSABUILD is done."%_utils.timer(start))
@@ -88,6 +93,11 @@ def msad(ctx,prog,inmsa,newseq,oldcopy):
 	if not os.path.exists(fin2):
 		raise FileNotFoundError("couldn't read the input file %s."%fin2)
 
+	# set path variable to find mafft
+	my_env = os.environ
+	if 'COVA_BIN_PATH' in my_env.keys():
+		my_env['PATH'] = ':'.join([ my_env['COVA_BIN_PATH'], my_env['PATH']])
+
 	# first, copy the original file
 	print("Generating backup for the original MSA")
 	shutil.copy(src=fin1, dst=fcopy)
@@ -98,7 +108,7 @@ def msad(ctx,prog,inmsa,newseq,oldcopy):
 		_utils.timer(start),fin2, fcopy,' '.join(cmd),fout))
 	# rewrite MSA file
 	with open( fout,'w') as flob:
-		s1 = subprocess.run( cmd, stdout=flob)
+		s1 = subprocess.run( cmd, stdout=flob, env=my_env)
 	print("%s:\tMSAD is done."%_utils.timer(start))
 
 @cli.command()
@@ -389,6 +399,9 @@ proceed and overwrite OR with [n] to terminate this command''')
 	if action:
 		my_env = os.environ
 		my_env['OMP_NUM_THREADS'] = ctx.obj['NCPU']
+		# set path variable to find fasttree
+		if 'COVA_BIN_PATH' in my_env.keys():
+			my_env['PATH'] = ':'.join([ my_env['COVA_BIN_PATH'], my_env['PATH']])
 		cmd = [prog, '-quiet', '-nt', '-mlnni', '4', '-nosupport', fin]
 		print("%s: Building Phylogeny from %s,\n Command: %s,\n Output will be saved to %s"%(\
 			_utils.timer(start),fin,' '.join(cmd),fout))
@@ -439,9 +452,14 @@ def sel(ctx,prog,tree,indr,outdr,outr,outs):
 	if not os.path.exists(dout):
 		os.mkdir(dout)
 	
+	# set path variable to find hyphy
+	my_env = os.environ
+	if 'COVA_BIN_PATH' in my_env.keys():
+		my_env['PATH'] = ':'.join([ my_env['COVA_BIN_PATH'], my_env['PATH']])
+
 	# check if hyphy can find its batch files
 	cmd = [prog, 'fubar', '--help']
-	s = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+	s = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT, env=my_env)
 	if s.returncode != 0:
 		raise FileNotFoundError("Hyphy couldn't find where FUBAR is. Check library path")
 
