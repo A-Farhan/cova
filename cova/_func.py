@@ -180,7 +180,7 @@ def annotate_var(fin,fout,ft=FEATURETABLE,genome=GENOME,codon_table=codon_table[
 			# list of amino acid variant(s)
 			avs = _utils.nv2av(p=cds_x, v=nvp[3], seq=codonls, codon_table=codon_table)
 			# make an entry in the output table
-			entry = [ [ prot, ftrs[2] ] + nvp[1:] + i + [','.join(var_genomes[tuple(nvp)])]\
+			entry = [ [ prot, PROTNAMES[ftrs[2]] ] + nvp[1:] + i + [','.join(var_genomes[tuple(nvp)])]\
 				for i in avs]
 			out.extend(entry)
 	
@@ -219,7 +219,6 @@ def plottree(ftree,fplot,fmap=None):
 
 	# create treestyle
 	ts = ete3.TreeStyle()
-	ts.scale = 100000
 	ts.branch_vertical_margin = -1
 	
 	# If mapping is available, then use it to color leaves and branches
@@ -408,20 +407,17 @@ proceed and overwrite OR with [n] to skip this protein and retain the MSA file''
 	_utils.writecsv(fl=frout, data=rates_out, header=['protein', 'exp_subs','syn', 'nonsyn', 'dnds'])
 	_utils.writecsv(fl=fsout, data=sites_out, header=['protein','site','syn', 'nonsyn', 'post_prob'])
 
-def genome_var(fpm,fann,fout):
+def genome_var(fin,fout):
 	"""
 	Write a table of genomes and their shared and unique annotated point mutations.
 
 	Arguments:
-	- fpm - full path to the file of point mutations table
-	- fann - full path to the file of annotated variants table
+	- fin - full path to the file of annotated variants table
 	- fout - full path to output file
 	"""
 	## checks
-	if not os.path.exists(fpm):
-		raise FileNotFoundError("input file %s must be present."%fpm)
-	if not os.path.exists(fann):
-		raise FileNotFoundError("input file %s must be present."%fann)
+	if not os.path.exists(fin):
+		raise FileNotFoundError("input file %s must be present."%fin)
 	# if output is alaready present
 	action = True
 	if os.path.exists(fout):
@@ -439,42 +435,40 @@ proceed and overwrite OR with [n] to terminate this command''')
 		print("okay! Exiting.")
 		return
 
-	head_vtab, vtab = _utils.readcsv( fl=fpm, sep='\t', header=True)
-	head_van, van = _utils.readcsv( fl=fann, sep='\t', header=True)
-	# list of genome ids
-	genomes = head_vtab[2:]
-	# create a dict of genomes and all variants
-	genome_vrs = { genome:[ ( row[0], row[x+2]) for row in vtab if row[1] != row[x+2] ] \
-					for x,genome in enumerate(genomes) }
-	# convert annotation table to a dict
-	var_ann = { tuple(i[2:4]):PROTNAMES[i[1]] +'_'+ i[-1] for i in van \
-				if len(set(re.split('\d+',i[-1]))) > 1}
-	# use above to get a dict of genomes and annotated variants
-	genome_anv = { k:[ var_ann[i] for i in v if i in var_ann.keys()] for k,v in genome_vrs.items() }
-	# pool annotated variants
-	all_anv = set( j for i in genome_anv.values() for j in i)
+	# annotation table
+	head_van, van = _utils.readcsv( fl=fin, sep='\t', header=True)
+	# subset of non-synonymous variants
+	nsmv = [ i for i in van if len(set(re.split('\d+',i[-2]))) > 1]
+	# list of all such variants
+	allvs = [ '_'.join([ row[1], row[-2]]) for row in nsmv]
+	# dict of genomes and variants
+	genome_vrs = {}
+	for x, row in enumerate(nsmv):
+		v = allvs[x]
+		genomes = row[-1].split(',')
+		for genome in genomes:
+			if genome not in genome_vrs.keys():
+				genome_vrs[genome] = [v]
+			else:
+				genome_vrs[genome].append(v)
+
 	# for every genome, get number and values of all, shared and unique variants
 	genome_vls = {}
 
-	for genome,anv in genome_anv.items():
-		# all variants
-		n_allv = len(genome_vrs[genome])
+	for genome,var in genome_vrs.items():
+		# no. of variants
+		nvs = len(var)
 		
-		# if genome has no variants, skip
-		if n_allv == 0:
-			print("\t%s has no variants."%genome)
-			continue
-
 		# set of variants in other genomes
-		other_vs = set(i for k,v in genome_anv.items() if k != genome for i in v)
+		other_vs = set( i for k,v in genome_vrs.items() if k != genome for i in v)
 		# shared variants
-		shared_vs = set(anv) & other_vs
+		shared_vs = set(var) & other_vs
 		nsv = len(shared_vs)
 		# unique varuants
-		unq_vs = set(anv) - other_vs
+		unq_vs = set(var) - other_vs
 		nuv = len(unq_vs)
 		# make an entry in the dict
-		genome_vls[genome] = [ n_allv, nsv, nuv, shared_vs, unq_vs]
+		genome_vls[genome] = [ nvs, nsv, nuv, shared_vs, unq_vs]
 
 	# process output table
 	out = [ [k] + v[:3] + [ ','.join(v[3]), ','.join(v[4])] for k,v in genome_vls.items() ]

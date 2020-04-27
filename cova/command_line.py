@@ -289,6 +289,19 @@ proceed and overwrite OR with [n] to terminate this command''')
 
 @cli.command()
 @click.pass_context
+@click.option('--infile',default='prot_point_mutations_annotated.tsv',show_default=True)
+@click.option('--outfile',default='genome_variants.tsv',show_default=True)
+def tabvs(ctx,infile,outfile):
+	"""Tabulate genomes with their shared and unique variants."""
+	fin = os.path.join(ctx.obj['DR'], infile)
+	fout = os.path.join(ctx.obj['DR'], outfile)
+		
+	print("%s: Identifying shared and unique non-synonymous variants"%_utils.timer(start))
+	cova.genome_var(fin,fout)
+	print("%s:\t TABVS is done."%_utils.timer(start))
+
+@cli.command()
+@click.pass_context
 @click.option('--infile',default='genome_aln.fna',show_default=True)
 @click.option('--outfile',default='insertions.tsv',show_default=True)
 def vcali(ctx,infile,outfile):
@@ -472,21 +485,6 @@ def sel(ctx,prog,tree,indr,outdr,outr,outs):
 	cova.parse_fubar(indr=dout, frout=frout, fsout=fsout)
 	print("%s:\t SEL is done."%_utils.timer(start))
 
-@cli.command()
-@click.pass_context
-@click.option('--infile1',default='point_mutations.tsv',show_default=True)
-@click.option('--infile2',default='prot_point_mutations_annotated.tsv',show_default=True)
-@click.option('--outfile',default='genome_variants.tsv',show_default=True)
-def tabvs(ctx,infile1,infile2,outfile):
-	"""Tabulate genomes with their shared and unique variants."""
-	fin1 = os.path.join(ctx.obj['DR'], infile1)
-	fin2 = os.path.join(ctx.obj['DR'], infile2)
-	fout = os.path.join(ctx.obj['DR'], outfile)
-		
-	print("%s: Identifying shared and unique non-synonymous variants"%_utils.timer(start))
-	cova.genome_var(fpm=fin1,fann=fin2,fout=fout)
-	print("%s:\t TABVS is done."%_utils.timer(start))
-
 ### command to run all other commands
 @cli.command()
 @click.pass_context
@@ -518,8 +516,8 @@ def full(ctx):
 	ctx.forward(msap)
 	ctx.forward(vcalpd)
 	ctx.forward(annpv)
+	ctx.forward(tabvs)
 	ctx.forward(vcali)
 	ctx.forward(div)
 	ctx.forward(tree)
 	ctx.forward(sel)
-	ctx.forward(tabvs)
