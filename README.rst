@@ -129,9 +129,7 @@ Sub-commands
 
 1. **MSABUILD**
 
-   This command is a MAFFT wrapper to build whole-genome Multiple Sequence Alignments (MSA).
-   To speed up the process, MSABUILD performs no more than 5 refinement iterations and to reduce the 
-   memory requirement, particularly a problem with wide whole-genome alignments, it uses the ``--nomemsave`` option.
+   This command is a MAFFT wrapper to build whole-genome Multiple Sequence Alignments (MSA). To speed up the process, MSABUILD performs no more than 5 refinement iterations. For the same reason, we have assumed sufficient RAM would be available, and included ``--nomemsave`` option, since wide alignments, by default, triggers a 2X slower algorithm to reduce memory requirement. 
 
    Input:
 
