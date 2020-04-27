@@ -46,8 +46,14 @@ Installation
    .. code-block:: bash
    
       pip install <repo-path>/dist/*.whl
-
+      
    Replace <repo-path> by the full path of your cloned cova repository. 
+   
+   This step may throw an error related to pyqt5 instllation. In that case, try upgrading pip.
+   
+   .. code-block:: bash
+   
+      pip install --upgrade pip
 
 4. Install external programs.
 
