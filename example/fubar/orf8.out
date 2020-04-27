@@ -1,0 +1,68 @@
+
+Analysis Description
+--------------------
+Perform a Fast Unbiased AppRoximate Bayesian (FUBAR) analysis of a
+coding sequence alignment to determine whether some sites have been
+subject to pervasive purifying or diversifying selection. v2.1
+introduces two more methods for estimating the posterior distribution of
+grid weights: collapsed Gibbs MCMC (faster) and 0-th order Variation
+Bayes approximation (fastest). Please note that a FUBAR analysis
+generates a cache and a results JSON file in the same directory as
+directory as the original alignment. HyPhy needs to have write
+privileges to this directory. For example if the original file is in
+/home/sergei/FUBAR/data/pol.nex then at the end of a FUBAR run, there
+will also exist FUBAR-generated files
+/home/sergei/FUBAR/data/pol.nex.FUBAR.json,
+/home/sergei/FUBAR/data/pol.nex.fubrar.cache. They also provide
+checkpointing so that a partially completed analysis can be restarted.
+
+- __Requirements__: in-frame codon alignment (possibly partitioned) and a phylogenetic tree
+(one per partition)
+
+- __Citation__: FUBAR: a fast, unconstrained bayesian approximation for inferring
+selection (2013), Mol Biol Evol. 30(5):1196-205
+
+- __Written by__: Sergei L Kosakovsky Pond
+
+- __Contact Information__: spond@temple.edu
+
+- __Analysis Version__: 2.2
+
+
+>code –> Universal
+
+>Loaded a multiple sequence alignment with **30** sequences, **121** codons, and **1** partitions from `/home/farhan/projects/covid19/test_cova/prots_nmsa/orf8.msa`
+Save FUBAR cache to : 
+>cache –> /home/farhan/projects/covid19/test_cova/fubar/orf8.cache
+> FUBAR will write cache and result files to _/home/farhan/projects/covid19/test_cova/prots_nmsa/orf8.msa.FUBAR.cache_ and _/home/farhan/projects/covid19/test_cova/prots_nmsa/orf8.msa.FUBAR.json_, respectively 
+
+
+> Number of grid points per dimension (total number is D^2) (permissible range = [5,50], default value = 20, integer): 
+>output –> /home/farhan/projects/covid19/test_cova/prots_nmsa/orf8.msa.FUBAR.json
+> Number of grid points per dimension (total number is D^2) (permissible range = [5,50], default value = 20, integer): 
+>grid –> 20
+
+>method –> Variational-Bayes
+> The concentration parameter of the Dirichlet prior (permissible range = [0.001,1], default value = 0.5): 
+>concentration_parameter –> 0.5
+
+
+### Obtaining branch lengths and nucleotide substitution biases under the nucleotide GTR model
+* Log(L) =  -493.06, AIC-c =  1114.88 (64 estimated parameters)
+* Tree length (expected substitutions/site) for partition 1 :    0.003
+
+### Computing the phylogenetic likelihood function on the grid 
+* Determining appropriate tree scaling based on the best score from a  20 x 20 rate grid
+* Best scaling achieved for 
+	* synonymous rate =  0.000
+	* non-synonymous rate =  1.227
+* Computing conditional site likelihoods on a 20 x 20 rate grid
+
+### Running an iterative zeroth order variational Bayes procedure to estimate the posterior mean of rate weights
+* Using the following settings
+	* Dirichlet alpha  : 0.5
+
+### Tabulating site-level results
+----
+## FUBAR inferred no sites under subject to positive selection at posterior probability >= 0.9
+
