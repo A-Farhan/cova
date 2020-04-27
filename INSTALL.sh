@@ -8,7 +8,7 @@ echo "External programs will be installed at $my_path"
 cd softwares/                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           
 
 ### MAFFT ###
-echo "`date` -- Proceed with MAFFT installation? [y/n]"
+echo -e "\n\n`date` -- Proceed with MAFFT installation? [y/n]"
 read response
 if [ $response == 'y' ]; then
     echo "Okay! Installing MAFFT at $my_path"
@@ -40,7 +40,7 @@ if [ $response == 'y' ]; then
 fi
 
 ### FastTree ###
-echo "`date` -- Proceed with FastTree installation? [y/n]"
+echo -e "\n\n`date` -- Proceed with FastTree installation? [y/n]"
 read response
 if [ $response == 'y' ]; then
     echo "Okay! Installing FastTree at $my_path"
@@ -52,7 +52,7 @@ if [ $response == 'y' ]; then
 fi
 
 ### HYPHY ###
-echo "`date` -- Proceed with Hyphy installation? [y/n]"
+echo -e "\n\n`date` -- Proceed with Hyphy installation? [y/n]"
 read response
 if [ $response == 'y' ]; then
     echo "Okay! Installing Hyphy at $my_path"

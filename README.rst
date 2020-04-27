@@ -10,60 +10,13 @@ This pipeline performs following analyses on a collection of coronavirus genomes
 * Phylogenetic inference
 * Positive selection analysis
 
-The following external programs must be present to run CoVa
+Following external programs are required::
 
 * MAFFT 		   : Build Multiple Sequence Alignment
-* FastTreeMP : Build phylogeny
-* Hyphy 		   : Selection analysis to identify sites under positive selection
+* FastTreeMP   : Build phylogeny
+* Hyphy 		   : Perform selection analysis to identify sites under positive selection
 
-Installation of external programs
----------------------------------
-
-**MAFFT**
-
-You can follow the instructions from https://mafft.cbrc.jp/alignment/software/installation_without_root.html
-to download and install MAFFT. 
-
-Cova runs the following MAFFT command
-
-.. code-block:: bash
-
-   mafft --quiet --nomemsave --maxiterate 5 --thread <ncpu> <infile>
-   
-**FastTree**
-
-Instructions for downloading and installing are available at 
-http://www.microbesonline.org/fasttree/#Install
-
-You can either download the executables OR build from the source following the instructions
-from the above link. 
-
-The following command builds FastTree from the source file (FastTree.c) with
-
-* Double-precision: improves branch length precision for highly similar sequences, AND
-* OpenMP: allows multi-threading for faster computations 
-
-.. code-block:: bash
-
-   gcc -DUSE_DOUBLE -DOPENMP -fopenmp -O3 -finline-functions -funroll-loops -Wall -o FastTree FastTree.c -lm
-   
-Cova runs the following FastTree command. To reduce memory requirement, split supports are not calculated as these are not very informative for wide alignments. 
-
-.. code-block:: bash
-
-   FastTree -quiet -nt -mlnni 4 -nosupport
-   
-**Hyphy**
-
-To setup Hyphy, see https://hyphy.org/download/
-
-Cova makes use of Hyphy's **FUBAR** program to do selection analysis and identify sites under positive selection. It runs FUBAR as below
-
-.. code-block:: bash
-
-   hyphy fubar --alignment <msafile> --tree <treefile> --cache <cachefile>
-   
-CoVa installation
+Installation
 -----------------
 
 1. Create a python virtual environment, at a location of your choice. 
@@ -73,6 +26,8 @@ CoVa installation
    .. code-block:: bash
 
       python3 -m venv <path/name>
+
+   replace <path/name> by a path of your choice. 
    
    b. Activate this environment by running
    
@@ -86,26 +41,43 @@ CoVa installation
 
       git clone https://github.com/A-Farhan/cova.git
  
-   Copy wheel to a location of your choice.
-   
-   .. code-block:: bash
-   
-      cp <path-to-cova-repo>/dist/cova-0.0.1-py3-none-any.whl <location-of-choice>
-      
-      cd <location-of-choice>
  
-3. Install the package from the wheel
+3. Install the package from the binary distribution. 
 
    .. code-block:: bash
    
-      pip install <wheel-file>
-      
-4. Open python and test your installation by importing cova
+      pip install <repo-path>/dist/*.whl
 
-   .. code-block:: python
-   
-      import cova
+   replace <repo-path> by the full path of your cloned cova repository. 
+
+4. Install external programs.
+
+   a. ``cd`` to cova repository
+
+   b. run ``./INSTALL.sh``. This is an interactive script. It will ask for the permission to proceed with each installation *viz*. MAFFT, FastTree and Hyphy. Appropriate response should be *y* (yes) OR *n* (no). If you have any of these programs already installed, then you can choose to skip its installation here.
+
+   c. CoVa expects external programs to be available system-wide, by default. In other words, programs are invoked without providing the full path. If you installed external programs using the previous step, a new directory *local* will be created inside the repository. All 3 programs shall then be accessible from the path <repo-path>/local/bin/.
+
+   You'll need to add the following line to your ~/.bashrc file.
+
+   .. code-block:: bash
+
+      export COVA_BIN_PATH=<repo-path>/cova/local/bin  
+
+   d. You can also access your pre-installed external programs similarly without using full paths. Simply, add their respective paths to your PATH variable.
+
+   .. code-block:: bash
+
+      export PATH=$PATH:<full-path-to-external-program>
       
+   e. You can also find instructions to download and install these programs from the following urls:
+
+      https://mafft.cbrc.jp/alignment/software/installation_without_root.html
+
+      http://www.microbesonline.org/fasttree/#Install
+
+      https://hyphy.org/download/
+
 Run CoVa from the command-line
 ------------------------------
 
@@ -164,6 +136,20 @@ Sub-commands
 
    A multi-FASTA file of *aligned* whole-genomes present in the same directory, named "genome_aln.fna" by default.
 
+2. **MSAD**
+
+   MAFFT allows for addition of new sequences to pre-existing MSAs. CoVa makes use of this feature to simplify incorporation of incoming genomic data and update analysis results. To do so, the main command can be run with the flag ``--addseq``. To facilitate rest of the analysis without changing any arguments, the MSA is changed in place and a copy is kept for back up. All the other analysis files are updated without a backup. If you wish to retain previous analysis, you can separately copy these files to a directory. 
+
+   Input:
+
+   MSA file generated by ``msabuild``.
+
+   A FASTA file of possibly multiple genome sequences to be incorporated in the above MSA.
+
+   Output:
+
+   Updated input MSA file. 
+
 2. **MSAREF**
 
    Before we can call variants ( point mutations and deletions) relative to a reference, our MSA must be restricted to the sites present in this reference. That's the job of this command.
@@ -182,7 +168,7 @@ Sub-commands
 
    Input:
 
-   MSA file generated by ``msaref``
+   MSA file generated by ``msaref``.
 
    Output:
 
@@ -209,7 +195,7 @@ Sub-commands
 
 5. **VCALPD**
 
-   Variant CALling ( Point mutations / Deletions)  
+   Variant CALling ( Point mutations / Deletions).  
 
    Input:
 
@@ -217,19 +203,17 @@ Sub-commands
 
    Output:
 
-   Two tab-delimited tables
+   Point mutation table with 1 row per variant and 1 column per genome, except the first 2 columns are for 1-indexed genomic coordinate and reference allele respectively.
 
-   a. Point mutation table with 1 row per variant and 1 column per genome, except the first 2 columns are for 1-indexed genomic coordinate and reference allele respectively.
+   Deletion table with 1 row per deletion, and following columns::
 
-   b. Deletion table with 1 row per deletion, and following columns::
+      a. pos - 1-indexed genomic coordinate of the first base of deletion
 
-      1) pos - 1-indexed genomic coordinate of the first base of deletion
+      b. ref - deleted reference sequence
 
-      2) ref - deleted reference sequence
+      c. len - length of deletion
 
-      3) len - length of deletion
-
-      4) id  - Bits for absence(0) OR presence(1) of deletion in the respective genome
+      d. id  - Bits for absence(0) OR presence(1) of deletion in the respective genome
 
       There is one id column for every genome in the MSA. 
 
@@ -296,7 +280,7 @@ Sub-commands
 
    Output:
 
-   A tab-delimited table. First row is for the whole-genome and following rows are for other regions.
+   A comma-delimited table. First row is for the whole-genome and following rows are for other regions.
    First column is the region's name and second column is for its nucleotide diversity.
 
 10. **TREE**
@@ -327,7 +311,7 @@ Sub-commands
 
 	output files generated by FUBAR
 
-	A tab-delimited table of *rates* with 1 row per protein and following columns::
+	A comma-delimited table of *rates* with 1 row per protein and following columns::
 
 	a. protein 	- common name or abbreviation for the protein
 
@@ -339,7 +323,7 @@ Sub-commands
 
 	e. dnds 	- (nonsyn-syn) 
 
-	A tab-delimited table of *sites* with 1 row per site and following columns::
+	A comma-delimited table of *sites* with 1 row per site and following columns::
 
 	a. protein 	 - common name or abbreviation for the protein
 
@@ -379,30 +363,40 @@ Sub-commands
 
 	f. unique    - comma-separated list of unique variants
 
+External commands
+---------------------------------
 
+**MAFFT**
 
+Cova runs the following MAFFT command
 
+.. code-block:: bash
 
+   mafft --quiet --nomemsave --maxiterate 5 --thread <ncpu> <infile>
 
+**FastTree**
 
+FastTree in cova was built from the source with
 
+* Double-precision: improves branch length precision for highly similar sequences, AND
+* OpenMP: allows multi-threading for faster computations 
 
+using the following command
 
+.. code-block:: bash
 
+   gcc -DUSE_DOUBLE -DOPENMP -fopenmp -O3 -finline-functions -funroll-loops -Wall -o FastTree FastTree.c -lm
+   
+Cova runs the following FastTree command. To reduce memory requirement, split supports are not calculated as these are not very informative for wide alignments. 
 
+.. code-block:: bash
 
+   FastTree -quiet -nt -mlnni 4 -nosupport
 
+**Hyphy**
 
+Cova makes use of Hyphy's **FUBAR** program to do selection analysis and identify sites under positive selection. It runs FUBAR as below
 
+.. code-block:: bash
 
-
-
-
-
-
-
-
-
-
-
-
+   hyphy fubar --alignment <msafile> --tree <treefile> --cache <cachefile>

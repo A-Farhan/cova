@@ -10,9 +10,9 @@ start = time.time()
 @click.version_option()
 @click.option('--indr', help='Full path to the working directory', default=os.getcwd(), type=click.Path())
 @click.option('--ref', help='Reference accession', default='NC_045512', show_default=True)
-@click.option('--ncpu', default=4, show_default=True, type=int)
-@click.option('--debug', help='See full traceback for errors', is_flag=True)
-@click.option('--addseq', help='Add new sequences and redo analysis', is_flag=True)
+@click.option('--ncpu', help='number of CPUs to use', default=4, show_default=True, type=int)
+@click.option('--debug', help='See full traceback for errors.', is_flag=True)
+@click.option('--addseq', help='Add new sequences and redo analysis.', is_flag=True)
 @click.pass_context
 def cli(ctx,indr,ref,ncpu,debug,addseq):
 	"""
@@ -39,7 +39,7 @@ def cli(ctx,indr,ref,ncpu,debug,addseq):
 @click.option('--infile', default='genomes.fna', show_default=True)
 @click.option('--outfile', default='genome_aln.fna', show_default=True)
 def msabuild(ctx,prog,infile,outfile):
-	"""Build whole-genome Multiple Sequence Alignment.""" 
+	"""Build whole-genome MSA.""" 
 	fin = os.path.join(ctx.obj['DR'],infile)
 	fout = os.path.join(ctx.obj['DR'],outfile)
 	
@@ -144,7 +144,6 @@ proceed and overwrite OR with [n] to terminate this command''')
 		print("okay! Existing output retained.")
 	print("%s:\tMSAREF is done."%_utils.timer(start))
 
-### Remove identical sequences
 @cli.command()
 @click.pass_context
 @click.option('--infile', default='genome_aln_ref.fna', show_default=True)
@@ -206,7 +205,7 @@ def msap(ctx,infile,outdr):
 @click.option('--outfp',default='point_mutations.tsv',show_default=True)
 @click.option('--outfd',default='deletions.tsv',show_default=True)
 def vcalpd(ctx,infile,outfp,outfd):
-	"""Call variants ( point mutations/deletions ) from Reference-limited MSA."""
+	"""Call point mutations/deletions from Reference-limited MSA."""
 	fin = os.path.join(ctx.obj['DR'], infile)
 	fout1 = os.path.join(ctx.obj['DR'],outfp)
 	fout2 = os.path.join(ctx.obj['DR'],outfd)
@@ -293,7 +292,7 @@ proceed and overwrite OR with [n] to terminate this command''')
 @click.option('--infile',default='genome_aln.fna',show_default=True)
 @click.option('--outfile',default='insertions.tsv',show_default=True)
 def vcali(ctx,infile,outfile):
-	"""Call variants ( insertions ) from MSA."""
+	"""Call insertions from MSA."""
 	fin = os.path.join(ctx.obj['DR'], infile)
 	fout = os.path.join(ctx.obj['DR'],outfile)
 
@@ -325,9 +324,9 @@ proceed and overwrite OR with [n] to terminate this command''')
 @click.pass_context
 @click.option('--infile',default='genome_aln_ref.fna',show_default=True)
 @click.option('--indr',default='prots_nmsa',show_default=True)
-@click.option('--outfile',default='divs.tsv',show_default=True)
+@click.option('--outfile',default='divs.csv',show_default=True)
 def div(ctx,infile,indr,outfile):
-	"""Compute whole-genome and gene-wise diversity from Reference-limited MSA."""
+	"""Compute nucleotide diversity from Reference-limited MSA."""
 	fin = os.path.join(ctx.obj['DR'], infile)
 	din = os.path.join(ctx.obj['DR'], indr)
 	fout = os.path.join(ctx.obj['DR'],outfile)
@@ -357,7 +356,7 @@ proceed and overwrite OR with [n] to terminate this command''')
 		pndivs = [ i for i in pndivs if i[1] is not None]
 		pndivs = sorted(pndivs, key=lambda x: x[1], reverse=True)
 		out = [ ['genome', wndiv] ] + pndivs
-		_utils.writecsv(fl=fout, data=out, sep='\t')
+		_utils.writecsv(fl=fout, data=out)
 	else:
 		print("okay! Existing output retained.")
 	print("%s:\t DIV is done."%_utils.timer(start))
@@ -371,7 +370,7 @@ proceed and overwrite OR with [n] to terminate this command''')
 @click.option('--plotfile', default='genomes_tree.png', show_default=True)
 @click.option('--mapfile', default=None, show_default=True)
 def tree(ctx,prog,infile,outfile,plotfile,mapfile):
-	"""Build phyogeny from whole-genome Multiple Sequence Alignment."""
+	"""Build phyogeny from whole-genome MSA."""
 	fin = os.path.join(ctx.obj['DR'],infile)
 	fout = os.path.join(ctx.obj['DR'],outfile)
 	fplot = os.path.join(ctx.obj['DR'],plotfile)
@@ -479,7 +478,7 @@ def sel(ctx,prog,tree,indr,outdr,outr,outs):
 @click.option('--infile2',default='prot_point_mutations_annotated.tsv',show_default=True)
 @click.option('--outfile',default='genome_variants.tsv',show_default=True)
 def tabvs(ctx,infile1,infile2,outfile):
-	"""Return table of genomes with their shared and unique non-synonymous changes."""
+	"""Tabulate genomes with their shared and unique variants."""
 	fin1 = os.path.join(ctx.obj['DR'], infile1)
 	fin2 = os.path.join(ctx.obj['DR'], infile2)
 	fout = os.path.join(ctx.obj['DR'], outfile)
