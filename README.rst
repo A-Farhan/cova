@@ -82,6 +82,10 @@ Installation
       	http://www.microbesonline.org/fasttree/#Install
 
       	https://hyphy.org/download/
+       
+       
+.. image:: images/cova_schema.svg
+ 
 
 Run CoVa from the command-line
 ------------------------------
