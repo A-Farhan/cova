@@ -9,6 +9,7 @@ from Bio import AlignIO
 from Bio.Data.CodonTable import unambiguous_dna_by_id as codon_table
 from Bio.Align import MultipleSeqAlignment
 from Bio.Seq import Seq
+from . import _divs
 
 ### Exceptions ###
 class LowercaseSeqError(Exception):
@@ -78,6 +79,27 @@ def writecsv(fl,data,header=None,sep=',',comments='',mode='w'):
         wrob = csv.writer(flob,delimiter=sep)
         if header != None: wrob.writerow(header)
         for i in data: wrob.writerow(i)
+
+def outcheck(path):
+    """Decide whether to proceed or not, if output is already present."""
+    proceed = True
+    
+    if os.path.exists(path):
+        response = input('''output path "%s" already exists. 
+Do you want to proceed and rewrite? [y/n]\n'''%path)
+    
+        if response == 'n':
+            proceed = False
+        elif response == 'y':
+            proceed = True
+        else:
+            raise ValueError('''Inappropriate input! Please respond with [y] to
+proceed and overwrite OR with [n] to skip this protein and retain the MSA file''')
+        
+    if not proceed:
+        print("okay! Exiting.")
+    
+    return proceed
 
 def split_data( data, ix, cixs):
     """
@@ -156,9 +178,9 @@ def list_ep(als,step=1):
         lns = out[-1][1]
     return out
 
-def is_genome_good(rec,ambt,chars='ACGT'):
+def is_seq_qual(rec,ambt,chars='ACGT'):
     """
-    Test if genome is of good quality based on the proportion of ambiguous characters.
+    Test if sequence is of good quality based on the proportion of ambiguous characters.
 
     Arguments:
     - rec   - biopython seqrecord
@@ -242,7 +264,8 @@ def nv2av(p,v,seq,codon_table=codon_table[1]):
         raise LenSeqError('All seq elements must be of length 3')
     # the position along with the variant sequence does not exceed cds length
     if p+len(v) > len(seq)*3:
-        raise LenSeqError('Position along with the variant sequence must not exceed CDS length') 
+        raise LenSeqError('''Position along with the variant sequence must not exceed CDS length.
+            pos = {}, variant = {}, CDS length = {}'''.format(p,v,len(seq)*3)) 
 
     # codon table attributes
     cotab = codon_table.forward_table
@@ -263,8 +286,11 @@ def nv2av(p,v,seq,codon_table=codon_table[1]):
     for cx,bxs in codon_bixs.items():
         # ancestral codon
         acod = seq[cx]
-        # ancestral amino acid
-        aa = cotab.get(acod)
+        # if ancestral codon is a stop codon, then ancestral amino acid is *
+        if acod in stopc:
+            aa = '*'
+        else:
+            aa = cotab.get(acod)
 
         # generate variant codon
         vcod = list(acod)
@@ -315,6 +341,18 @@ def extract_cds(begin,end,msa,has_stop,outf):
     # write alignment to file
     AlignIO.write(alignments=[cds], handle=outf, format='fasta')
     return cds
+
+def genome_seqtype(aln):
+    # list of column sequences in the aligment at these positions
+    pseqs = [ aln[:,p-1] for p in TYPEPOS]
+    # list of row suquences limited to these positions
+    id_st = []
+    for x,i in enumerate(zip(*pseqs)):
+        seq = ''.join(i).upper()
+        if seq in SEQTYPES.keys():
+            entry = [ aln[x].id, SEQTYPES[seq] ]
+            id_st.append(entry)
+    return id_st
 
 # (https://stackoverflow.com/questions/876853/generating-color-ranges-in-python)
 def get_N_HexCol(N):
@@ -409,7 +447,7 @@ class MSA(object):
             
     def remove_gapcols(self):   
         """Remove columns with gaps and return array."""
-        arr = numpy.delete( self.array, self.gaps, 1) 
+        arr = _divs.rmc_ef(ar = self.array, e='-', f=0)
         return arr
 
     def pdistmat(self,ncpu=1):
@@ -451,46 +489,6 @@ class MSA(object):
 
         return dmat
     
-    def ndiv(self,ncpu=1):
-        """
-        Compute nucleotide diversity:
-            Average pairwise difference of sequences per site
-            
-            if an MSA has L sites and N sequences, 
-            and d_ij represents number of differing sites between two sequences i and j
-            then the formula for nucleotide diversity is
-                sum(d_ij) / ( choose(N,2) * L )
-                    where i : 0 - (N-1)
-                      and j : i+1 - N
-
-        It achieves a substantial speed gain by splitting calculation over columns
-        as opposed to first calculating pairwise row differences. 
-        """
-        # array after removing columns with gaps
-        ar = self.remove_gapcols()
-        # number of sequences and number of sites
-        N,L = ar.shape
-        # terminate if no sites left
-        if L == 0:
-            return
-        # no. of pairs
-        numpyairs = binom(N, 2)
-        
-        # function to parallelize
-        def fun(k,r=ar):
-            # set of letters
-            sl = set(r[:,k])
-            if len(sl) == 1:
-                return 0
-            counts = list( Counter(r[:,k]).values())
-            out = sum([ i*sum(counts[x+1:]) for x,i in enumerate(counts)])
-            return out
-
-        totd = sum( Parallel(n_jobs=ncpu) ( delayed(fun) (k) for k in range(L)))
-        
-        div = round( totd/(numpyairs*L), 4)
-        return div
-
     def limref(self,ref):
         """
         Limit MSA to sites present in a given reference. By excluding columns 
@@ -509,6 +507,7 @@ class MSA(object):
         # check for presence of gaps in the reference record
         # if no gaps, then the alignment is already reference limited
         if '-' not in refrec:
+            print("No gaps in the reference. Returning as it is!")
             return msa 
 
         # list of sequences from the non-gapped columns
@@ -555,6 +554,37 @@ class MSA(object):
                 genome_dups.append( [rec.id, ','.join(idenrecs)])
         return ( new_msa, genome_dups)
     
+    def ndiv(self,ref=None):
+        """
+        Compute nucleotide diversity:
+            Average pairwise difference of sequences per site
+            
+            if an MSA has L sites and N sequences, 
+            and d_ij represents number of differing sites between two sequences i and j
+            then the formula for nucleotide diversity is
+                sum(d_ij) / ( choose(N,2) * L )
+                    where i : 0 - (N-1)
+                      and j : i+1 - N
+
+        It achieves a substantial speed gain by splitting calculation over columns
+        as opposed to first calculating pairwise row differences. 
+        """
+        if ref is None:
+            msa = self.aln
+        else:
+            msa = self.limref()
+        return _divs.nucdiv_aln( msa, t=0)
+
+    def slide_ndiv(self,window,jump,ncpu=1, ref=None):
+        
+        if ref is None:
+            aln = self.aln
+        else:
+            aln = self.rmdup(ref)[0]
+        
+        out = _divs.nucdiv_slide(msa=aln,window=window,jump=jump,ncpu=ncpu)
+        return out
+
     def ins(self,ref,ambt=10,chars='ACGT-',header=False):
         """
         Identify positions and sequence of insertions across variants relative to a given reference.
@@ -604,12 +634,6 @@ class MSA(object):
                 #print("\tskipping the reference sequence")
                 continue
 
-            # check genome quality, in terms of ambiguous letters
-            # skip, if of poor quality
-            if not is_genome_good(rec, ambt):
-                print("\trecord %s failed the quality check. Skipping!"%genomes[c])
-                continue
-        
             # indices of sites where rec has a letter but ref has a gap
             ixs = [ x for x,i in enumerate(rec) if refrec[x] == '-' and i != '-' ]
             # skip, if no insertion sites 

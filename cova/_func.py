@@ -1,9 +1,35 @@
-import os, re, subprocess, matplotlib, seaborn, ete3
-from . import _utils, FEATURETABLE, GENOME, PROTNAMES
+import os, re, subprocess, matplotlib, seaborn, pandas
+from . import _utils, FEATURETABLE, GENOME, PROTNAMES, TYPEPOS, SEQTYPES
 from time import time
 from Bio import SeqIO, AlignIO
 from Bio.Align import MultipleSeqAlignment
 from Bio.Data.CodonTable import unambiguous_dna_by_id as codon_table
+
+def rm_genome_w_stopm(fin,fout,finmsa,foutmsa):
+	"""
+	Remove all genomes with non-sense mutations from an input MSA.
+	"""
+	# table of variants
+	vtab = _utils.readcsv(fl=fin,sep='\t',header=True)[1]
+	# dict of genome with their list of variants
+	genome_vrs = { i[0]:i[4].split(',')+i[5].split(',') for i in vtab}
+	# dict of genome with their list of nonsense mutations
+	genome_stopm = {}
+	
+	for k,v in genome_vrs.items():
+		stopms = [ i for i in v if bool(re.search('_[A-Z]\d+\*',i))]
+		if len(stopms) > 0:
+			genome_stopm[k] = ','.join(stopms)
+
+	# list form of the dict of genomes with nonsense mutations 
+	out = [ [k,v] for k,v in genome_stopm.items()]
+	_utils.writecsv(fl=fout, data=out, sep='\t')
+	# input alignment 
+	aln = AlignIO.read(finmsa,'fasta')
+	# list of sequence records with no nonsense mutation
+	alnls = [ i for i in aln if i.id not in genome_stopm.keys()]
+	SeqIO.write(alnls,foutmsa,'fasta')
+
 
 def extract_nucmsa_prots(msa, outdr, rfss=13468, prfs='YP_009725307.1', pepswstop = ['methyltransferase']):
 	"""
@@ -35,22 +61,6 @@ def extract_nucmsa_prots(msa, outdr, rfss=13468, prfs='YP_009725307.1', pepswsto
 	for k,v in pid_ends.items():
 		# output file for subMSA
 		fmout = os.path.join( outdr, v[3]+'.msa')
-
-		action = True
-		if os.path.exists(fmout):
-			response=input('''output file %s already exists. 
-Do you want to proceed and rewrite it? [y/n]\n'''%fmout)
-			if response == 'n':
-				action = False
-			elif response == 'y':
-				action = True
-			else:
-				raise ValueError('''Inappropriate input! Please respond with [y] to
-proceed and overwrite OR with [n] to skip this protein and retain the MSA file''')
-			
-		if not action:
-			print("okay! Skipping this protein.")
-			continue
 	
 		# does the region have stop codon
 		if v[0] == 'CDS':
@@ -97,7 +107,7 @@ def annotate_var(fin,fout,ft=FEATURETABLE,genome=GENOME,codon_table=codon_table[
 	- fout 			- full path to output file of annotated mutations
 	- ft 			- NCBI reference feature table 
 	- genome 		- NCBI reference assembly genome
-	- codon_table 		- Biopython codon table 	[ Standard]
+	- codon_table 	- Biopython codon table 	[ Standard]
 	
 	Additional arguments:
 	To account for ribosomal frameshifting present in Coronavirus
@@ -161,9 +171,10 @@ def annotate_var(fin,fout,ft=FEATURETABLE,genome=GENOME,codon_table=codon_table[
 		except _utils.LenSeqError:
 			print("\tsequence of {} is not a multiple of 3 ( invalid CDS).".format(ftrs[2].upper()))
 			continue
+
 		# remove the terminal stop codon, if present
-		if codonls[-1] in stopc:
-			codonls = codonls[:-1]
+		#if codonls[-1] in stopc:
+		#	codonls = codonls[:-1]
 
 		# for every variant position
 		for nvp in vrs:
@@ -177,95 +188,27 @@ def annotate_var(fin,fout,ft=FEATURETABLE,genome=GENOME,codon_table=codon_table[
 					cds_x = genome_x - b - rfs_type
 			else:
 					cds_x = genome_x - b
+			
 			# list of amino acid variant(s)
-			avs = _utils.nv2av(p=cds_x, v=nvp[3], seq=codonls, codon_table=codon_table)
+			try:
+				avs = _utils.nv2av(p=cds_x, v=nvp[3], seq=codonls, codon_table=codon_table)
+			except _utils.LenSeqError:
+				print('''Invalid variant {} \n Associated protein's features {}
+					'''.format(nvp,prot_ftrs[prot]))
+				raise 
+
 			# make an entry in the output table
 			entry = [ [ prot, PROTNAMES[ftrs[2]] ] + nvp[1:] + i + [','.join(var_genomes[tuple(nvp)])]\
 				for i in avs]
 			out.extend(entry)
 	
+	# add a column for no. of genomes and one to identify mutation type
+	out = [ row[:-1] + [ 'N' if row[-2][0] != row[-2][-1] else 'S', row[-1].count(',') + 1, row[-1]] \
+	for row in out]
+
 	head = ['protein_id', 'name', 'position', 'ref_base', 'variant_base',\
-			'old_codon','new_codon','aa_change', 'genomes']
+			'old_codon','new_codon','aa_change', 'type', 'freq', 'genomes']
 	_utils.writecsv(fl=fout,data=out, header=head,sep='\t')
-
-def plottree(ftree,fplot,fmap=None):
-	"""
-	Plot phylogeny tree.
-
-	Arguments:
-	- ftree - input tree file
-	- fplot - output plot file 
-	- fmap 	- (optional) file for metadata on sequences, used to annotate tree
-	"""
-	## checks
-	# tree file is present
-	if not os.path.exists(ftree):
-		raise FileNotFoundError('tree file %s must be present.'%ftree)
-	# plot file has png suffix
-	if fplot.split('.')[-1] != 'png':
-		raise ValueError('output file must have suffix "png".')
-	# if map file is provided, it is a valid file path
-	if fmap is not None:
-	 	if type(fmap) is not str:
-	 		raise TypeError('file name must be a string.')
-	 	else:
-	 		if not os.path.exists(fmap):
-	 			raise FileNotFoundError("couldn't find the file %s."%fmap)
-
-	# load tree
-	t = ete3.Tree(ftree)
-	# list of leaves
-	leaves = t.get_leaf_names()
-
-	# create treestyle
-	ts = ete3.TreeStyle()
-	ts.branch_vertical_margin = -1
-	
-	# If mapping is available, then use it to color leaves and branches
-	if fmap is not None:
-		dmap = _utils.readcsv(fl=fmap,header=True)[1]
-	
-		# colors for countries
-		isol_country = { i[0]:i[5] for i in dmap}
-		countries = sorted( list( set( isol_country.values())))
-		nc = len(countries)
-		country_colors = _utils.get_N_HexCol(N=nc)
-		isol_country_color = {}
-		for k,v in isol_country.items():
-			x = countries.index(v)
-			c = country_colors[x]
-			isol_country_color[k] = c
-
-		# colors for months
-		isol_month = { i[0]:'-'.join(i[-2].split('-')[:2]) for i in dmap}
-		# months
-		months = sorted( list( set( isol_month.values())))
-		# dict of month names and corresponding key
-		month_key = {}
-		for x,i in enumerate(months):
-			month_key[i] = x+1
-		# replace months with key in the above
-		isol_mkey = { k:month_key[v] for k,v in isol_month.items()}
-		months = sorted( list(set(isol_mkey.values())))
-		nm = len(months)
-		month_colors = seaborn.color_palette('Blues',n_colors=nm)   
-		isol_month_color = {}
-		for k,v in isol_mkey.items():
-			x = months.index(v)
-			c = month_colors[x]
-			isol_month_color[k] = matplotlib.colors.to_hex(c)
-
-		for n in t.traverse():
-			if n.is_leaf():	
-				ns = ete3.NodeStyle()
-				ns['fgcolor'] = isol_country_color[n.name]
-				ns['size'] = 10
-				ns['hz_line_width'] = 4
-				ns['hz_line_color'] = isol_month_color[n.name]
-				n.set_style(ns)
-
-	# output
-	t.render(fplot,h=900,w=1000,units='px',tree_style=ts)
 
 def run_fubar(fmsa,ftree,outdr,prog):
 	"""
@@ -297,22 +240,6 @@ def run_fubar(fmsa,ftree,outdr,prog):
 	p = f.replace('.msa','') 
 	fsout = os.path.join( outdr, p+'.out')
 	
-	action = True
-	if os.path.exists(fsout):
-		response=input('''output file %s already exists. 
-Do you want to proceed and rewrite it? [y/n]\n'''%fsout)
-		if response == 'n':
-			action = False
-		elif response == 'y':
-			action = True
-		else:
-			raise ValueError('''Inappropriate input! Please respond with [y] to
-proceed and overwrite OR with [n] to skip this protein and retain the MSA file''')
-		
-	if not action:
-		print("okay! Exiting.")
-		return
-
 	# json output intermediate file
 	fjout_int = os.path.join( indr, f +'.FUBAR.json')
 	# json output file
@@ -341,22 +268,6 @@ def parse_fubar(indr,frout,fsout):
 	## checks
 	if not os.path.exists(indr):
 		raise IOError("Couldn't find the input directory %s."%indr)
-
-	action = True
-	if os.path.exists(frout) or os.path.exists(fsout):
-		response = input('''output file(s) already exist. 
-Do you want to proceed and rewrite? [y/n]\n''')
-		if response == 'n':
-			action = False
-		elif response == 'y':
-			action = True
-		else:
-			raise ValueError('''Inappropriate input! Please respond with [y] to
-proceed and overwrite OR with [n] to skip this protein and retain the MSA file''')
-		
-	if not action:
-		print("okay! Exiting.")
-		return
 			
 	# initialize lists for rates ans sites output tables
 	rates_out = []
@@ -380,7 +291,7 @@ proceed and overwrite OR with [n] to skip this protein and retain the MSA file''
 		
 		# skip the protein, if no change, as estimated by tree length
 		if len(tln) == 0:
-			print("\tno changes in %s."%p)
+			print('\t"Tree Length" entry missing! Check the FUBAR output file for details.%s.'%p)
 			continue
 		else:
 			tln = tln[0]
@@ -407,7 +318,22 @@ proceed and overwrite OR with [n] to skip this protein and retain the MSA file''
 	_utils.writecsv(fl=frout, data=rates_out, header=['protein', 'exp_subs','syn', 'nonsyn', 'dnds'])
 	_utils.writecsv(fl=fsout, data=sites_out, header=['protein','site','syn', 'nonsyn', 'post_prob'])
 
-def genome_var(fin,fout):
+def genome_seqtype(fin):
+    aln = AlignIO.read(fin,'fasta')
+    # list of column sequences in the aligment at these positions
+    pseqs = [ aln[:,p-1] for p in TYPEPOS]
+    # list of row suquences limited to these positions
+    id_st = {}
+    for x,i in enumerate(zip(*pseqs)):
+    	seq = ''.join(i).upper()
+    	if seq in SEQTYPES.keys():
+    		v = SEQTYPES[seq] 
+    	else:
+    		v = 'U'
+    	id_st[ aln[x].id ] = v	
+    return id_st
+
+def genome_var(fin):
 	"""
 	Write a table of genomes and their shared and unique annotated point mutations.
 
@@ -418,40 +344,27 @@ def genome_var(fin,fout):
 	## checks
 	if not os.path.exists(fin):
 		raise FileNotFoundError("input file %s must be present."%fin)
-	# if output is alaready present
-	action = True
-	if os.path.exists(fout):
-		response=input('''output file %s already exists. 
-Do you want to proceed and rewrite it? [y/n]\n'''%fout)
-		if response == 'n':
-			action = False
-		elif response == 'y':
-			action = True
-		else:
-			raise ValueError('''Inappropriate input! Please respond with [y] to
-proceed and overwrite OR with [n] to terminate this command''')
-
-	if not action:
-		print("okay! Exiting.")
-		return
-
+	
 	# annotation table
-	head_van, van = _utils.readcsv( fl=fin, sep='\t', header=True)
-	# subset of non-synonymous variants
-	nsmv = [ i for i in van if len(set(re.split('\d+',i[-2]))) > 1]
-	# list of all such variants
-	allvs = [ '_'.join([ row[1], row[-2]]) for row in nsmv]
+	van = pandas.read_csv(fin,sep='\t')
+	# only non-synonymous variants
+	nsmv = van[ van.type == 'N']
+	# no. of such variants
+	N = len(nsmv)
+	# join protein's name and amino acid change
+	allvs = nsmv['name'] + '_' + nsmv['aa_change']
 	# dict of genomes and variants
 	genome_vrs = {}
-	for x, row in enumerate(nsmv):
-		v = allvs[x]
-		genomes = row[-1].split(',')
+
+	for x in range(N):
+		v = allvs.iat[x]
+		genomes = nsmv['genomes'].iat[x].split(',')
 		for genome in genomes:
 			if genome not in genome_vrs.keys():
 				genome_vrs[genome] = [v]
 			else:
 				genome_vrs[genome].append(v)
-
+		
 	# for every genome, get number and values of all, shared and unique variants
 	genome_vls = {}
 
@@ -468,10 +381,6 @@ proceed and overwrite OR with [n] to terminate this command''')
 		unq_vs = set(var) - other_vs
 		nuv = len(unq_vs)
 		# make an entry in the dict
-		genome_vls[genome] = [ nvs, nsv, nuv, shared_vs, unq_vs]
+		genome_vls[genome] = [ nvs, nsv, nuv, ','.join(shared_vs), ','.join(unq_vs)]
 
-	# process output table
-	out = [ [k] + v[:3] + [ ','.join(v[3]), ','.join(v[4])] for k,v in genome_vls.items() ]
-	# write to file
-	_utils.writecsv(fl=fout, data=out, sep='\t',\
-		header=['genome','#variants','#shared', '#unique', 'shared', 'unique'])
+	return genome_vls
