@@ -1,6 +1,6 @@
 ## require
 import os, pandas, numpy, click
-from . import _utils, REF
+from . import utils, REF
 
 ## Functions ##
 def extract_metadata_gisaid_table(fin,fout=None):
@@ -31,7 +31,7 @@ def extract_metadata_gisaid_table(fin,fout=None):
 		ac_info[REF] = ['China','2019-12']
 
 	out = [ [k]+v for k,v in ac_info.items()]
-	_utils.writecsv(fl=fout, data=out, header=['accession','location','date'])
+	utils.writecsv(fl=fout, data=out, header=['accession','location','date'])
 
 def extract_metadata_ncbivirus_table(fin,fout=None):
 	
@@ -53,7 +53,7 @@ def extract_metadata_ncbivirus_table(fin,fout=None):
 		ac_info[REF] = ['China','2019-12']
 
 	out = [ [k]+v for k,v in ac_info.items()]
-	_utils.writecsv(fl=fout, data=out, header=['accession','location','date'])
+	utils.writecsv(fl=fout, data=out, header=['accession','location','date'])
 
 ## Main ##
 @click.command()
@@ -68,7 +68,7 @@ def main_fun(fin,fout,source):
 	outpath = os.path.join( os.path.dirname(fin), fout)
 	click.echo("Output will be saved to path: %s"%outpath)
 
-	if not _utils.outcheck(outpath):
+	if not utils.outcheck(outpath):
 		return
 
 	if source == 'gisaid':

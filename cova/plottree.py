@@ -1,6 +1,6 @@
 import os, sys, click, ete3, seaborn, matplotlib
 from time import time
-from . import _utils
+from . import utils
 
 start = time()
 
@@ -21,7 +21,7 @@ def colbyinfo(infodict,sorting_func = None):
 	# no. of such tags
 	ntags = len(infotags)
 	# a list of these many colors
-	colors = _utils.get_N_HexCol(N=ntags)
+	colors = utils.get_N_HexCol(N=ntags)
 	# dict of infotags and their corresponding color
 	infotag_color = { infotags[x]:colors[x] for x in range(ntags)}
 	# dict of data labels and their corresponding color
@@ -61,7 +61,7 @@ def main_fun(dr,ftree,fplot,fst,fld,typef,branch_scale,branch_support,show_legen
 		raise FileNotFoundError('tree file %s must be present.'%ftree)
 	
 	# should you proceed if the output path already exists
-	if not _utils.outcheck(fplot):
+	if not utils.outcheck(fplot):
 		return
 
 	# plot file has png suffix
@@ -92,9 +92,9 @@ def main_fun(dr,ftree,fplot,fst,fld,typef,branch_scale,branch_support,show_legen
 
 	### types #####################################
 	# colors for types
-	typedata = _utils.readcsv(fst)
+	typedata = utils.readcsv(fst)
 	th = len(typedata) * typef
-	type_isols = _utils.split_data(data=typedata, ix=1, cixs=0)
+	type_isols = utils.split_data(data=typedata, ix=1, cixs=0)
 	rmkeys = []
 	minors = [] 
 	for k,v in type_isols.items():
@@ -144,7 +144,7 @@ def main_fun(dr,ftree,fplot,fst,fld,typef,branch_scale,branch_support,show_legen
 
 	# If mapping is available, then use it to color leaves and branches
 	if fld is not None:
-		head, dmap = _utils.readcsv( fl=fld, header=True)
+		head, dmap = utils.readcsv( fl=fld, header=True)
 
 		# colors for locations
 		isol_loc = { i[0]:i[1] for i in dmap}
@@ -211,7 +211,7 @@ def main_fun(dr,ftree,fplot,fst,fld,typef,branch_scale,branch_support,show_legen
 	## output
 	if show is not None:
 		t.render(fplot,tree_style=ts,units='px',h=img_height,dpi=img_dpi)
-		click.echo("{}: Tree plotting complete. Output was saved in {}".format(_utils.timer(start),fplot))
+		click.echo("{}: Tree plotting complete. Output was saved in {}".format(utils.timer(start),fplot))
 	else:
 		t.show(tree_style=ts)
 	################

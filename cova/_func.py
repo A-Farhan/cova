@@ -1,5 +1,5 @@
 import os, re, subprocess, matplotlib, seaborn, pandas
-from . import _utils, FEATURETABLE, GENOME, PROTNAMES, TYPEPOS, SEQTYPES
+from . import utils, FEATURETABLE, GENOME, PROTNAMES, TYPEPOS, SEQTYPES
 from time import time
 from Bio import SeqIO, AlignIO
 from Bio.Align import MultipleSeqAlignment
@@ -10,7 +10,7 @@ def rm_genome_w_stopm(fin,fout,finmsa,foutmsa):
 	Remove all genomes with non-sense mutations from an input MSA.
 	"""
 	# table of variants
-	vtab = _utils.readcsv(fl=fin,sep='\t',header=True)[1]
+	vtab = utils.readcsv(fl=fin,sep='\t',header=True)[1]
 	# dict of genome with their list of variants
 	genome_vrs = { i[0]:i[4].split(',')+i[5].split(',') for i in vtab}
 	# dict of genome with their list of nonsense mutations
@@ -23,7 +23,7 @@ def rm_genome_w_stopm(fin,fout,finmsa,foutmsa):
 
 	# list form of the dict of genomes with nonsense mutations 
 	out = [ [k,v] for k,v in genome_stopm.items()]
-	_utils.writecsv(fl=fout, data=out, sep='\t')
+	utils.writecsv(fl=fout, data=out, sep='\t')
 	# input alignment 
 	aln = AlignIO.read(finmsa,'fasta')
 	# list of sequence records with no nonsense mutation
@@ -81,7 +81,7 @@ def extract_nucmsa_prots(msa, outdr, rfss=13468, prfs='YP_009725307.1', pepswsto
 			AlignIO.write(alignments=[cds], handle=fmout, format='fasta')					
 		# for regular proteins
 		else:
-			_utils.extract_cds(begin=v[1], end=v[2], msa=msa, has_stop=has_stop, outf=fmout)
+			utils.extract_cds(begin=v[1], end=v[2], msa=msa, has_stop=has_stop, outf=fmout)
 
 def annotate_var(fin,fout,ft=FEATURETABLE,genome=GENOME,codon_table=codon_table[1],\
 	rfs_type=-1,rfs_pos=13468,rfs_prot='YP_009725307.1'):
@@ -118,7 +118,7 @@ def annotate_var(fin,fout,ft=FEATURETABLE,genome=GENOME,codon_table=codon_table[
 	# list of stop codons
 	stopc = codon_table.stop_codons
 	# point mutations variant table
-	head, vartab = _utils.readcsv(fl=fin,sep='\t',header=True) 
+	head, vartab = utils.readcsv(fl=fin,sep='\t',header=True) 
 	# list of genomes
 	genomes = head[2:]
 	# subset feature table to columns of interest
@@ -147,7 +147,7 @@ def annotate_var(fin,fout,ft=FEATURETABLE,genome=GENOME,codon_table=codon_table[
 	# list of all variant tuples
 	vtups = list(var_genomes.keys())
 	# dict of protein and their variants
-	prot_vrs = _utils.split_data(data=vtups, ix=0, cixs=[0,1,2,3])
+	prot_vrs = utils.split_data(data=vtups, ix=0, cixs=[0,1,2,3])
 
 	# initialize output table
 	out = []
@@ -167,8 +167,8 @@ def annotate_var(fin,fout,ft=FEATURETABLE,genome=GENOME,codon_table=codon_table[
 		
 		# corresponding list of codons
 		try:
-			codonls = _utils.n2c(cds_seq)
-		except _utils.LenSeqError:
+			codonls = utils.n2c(cds_seq)
+		except utils.LenSeqError:
 			print("\tsequence of {} is not a multiple of 3 ( invalid CDS).".format(ftrs[2].upper()))
 			continue
 
@@ -191,8 +191,8 @@ def annotate_var(fin,fout,ft=FEATURETABLE,genome=GENOME,codon_table=codon_table[
 			
 			# list of amino acid variant(s)
 			try:
-				avs = _utils.nv2av(p=cds_x, v=nvp[3], seq=codonls, codon_table=codon_table)
-			except _utils.LenSeqError:
+				avs = utils.nv2av(p=cds_x, v=nvp[3], seq=codonls, codon_table=codon_table)
+			except utils.LenSeqError:
 				print('''Invalid variant {} \n Associated protein's features {}
 					'''.format(nvp,prot_ftrs[prot]))
 				raise 
@@ -208,7 +208,7 @@ def annotate_var(fin,fout,ft=FEATURETABLE,genome=GENOME,codon_table=codon_table[
 
 	head = ['protein_id', 'name', 'position', 'ref_base', 'variant_base',\
 			'old_codon','new_codon','aa_change', 'type', 'freq', 'genomes']
-	_utils.writecsv(fl=fout,data=out, header=head,sep='\t')
+	utils.writecsv(fl=fout,data=out, header=head,sep='\t')
 
 def run_fubar(fmsa,ftree,outdr,prog):
 	"""
@@ -315,8 +315,8 @@ def parse_fubar(indr,frout,fsout):
 	rates_out = [ i + [ round(i[-1]-i[-2],3)] for i in rates_out]
 	rates_out = sorted( rates_out, key=lambda x: x[-1], reverse=True)
 	# write both tables to files
-	_utils.writecsv(fl=frout, data=rates_out, header=['protein', 'exp_subs','syn', 'nonsyn', 'dnds'])
-	_utils.writecsv(fl=fsout, data=sites_out, header=['protein','site','syn', 'nonsyn', 'post_prob'])
+	utils.writecsv(fl=frout, data=rates_out, header=['protein', 'exp_subs','syn', 'nonsyn', 'dnds'])
+	utils.writecsv(fl=fsout, data=sites_out, header=['protein','site','syn', 'nonsyn', 'post_prob'])
 
 def genome_seqtype(fin):
     aln = AlignIO.read(fin,'fasta')

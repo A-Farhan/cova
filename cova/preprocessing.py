@@ -2,7 +2,7 @@
 import os, click
 from time import time
 from Bio import SeqIO
-from . import _utils, GENOME
+from . import utils, GENOME
 
 start = time()
 
@@ -18,7 +18,7 @@ def rm_lowqualseq(fin,p=1):
 	Value: biopython sequence record
 	"""
 	recs = SeqIO.parse(handle=fin, format='fasta')
-	modrecs = [ i for i in recs if _utils.is_seq_qual(rec=i, ambt=p)]
+	modrecs = [ i for i in recs if utils.is_seq_qual(rec=i, ambt=p)]
 	return modrecs
 
 def trim_header_gisaid(fin):
@@ -67,7 +67,7 @@ def main_fun(fin,fout,tqual,gisaid):
 	click.echo("Output will be saved to path: %s"%outpath)
 
 	# check if we should proceed in case output is present
-	if not _utils.outcheck(outpath):
+	if not utils.outcheck(outpath):
 		return
 
 	# remove low quality genomes
@@ -86,4 +86,4 @@ def main_fun(fin,fout,tqual,gisaid):
 	
 	# clean up
 	os.remove('tmp')
-	click.echo("%s: Processed output was saved in %s."%(_utils.timer(start),outpath))
+	click.echo("%s: Processed output was saved in %s."%(utils.timer(start),outpath))
