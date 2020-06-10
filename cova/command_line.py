@@ -15,6 +15,8 @@ def cli(ctx,indr,ncpu,debug,addseq):
 	"""
 	Variant analysis using whole-genome Multiple Sequence Alignments.
 	By default, it works on the current directory. Directory can be specified using INDR option.
+	
+	New sequences can be added to update an existing analysis using --addseq. 
 	"""
 	ctx.ensure_object(dict)
 	ctx.obj['DR'] = indr
