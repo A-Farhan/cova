@@ -301,7 +301,8 @@ def vcali(ctx,infile,outfile):
 @click.option('--jump',default=20,show_default=True,type=int)
 @click.option('--outfile1',default='divs.csv',show_default=True)
 @click.option('--outfile2',default='slide_divs.csv',show_default=True)
-def div(ctx,infile,indr,window,jump,outfile1,outfile2):
+@click.option('--slide',is_flag=True,help='Should we calculate sliding diversity?')
+def div(ctx,infile,indr,window,jump,outfile1,outfile2,slide):
 	"""Compute nucleotide diversity from Reference-limited MSA."""
 	fin = os.path.join(ctx.obj['DR'], infile)
 	din = os.path.join(ctx.obj['DR'], indr)
@@ -324,11 +325,12 @@ def div(ctx,infile,indr,window,jump,outfile1,outfile2):
 		out1 = [ ['genome', wndiv] ] + pndivs
 		cova._utils.writecsv(fl=fout1, data=out1)
 	
-	if cova._utils.outcheck(fout2):
-		print('''%s: Computing diversity within a window sliding over the genome.
-		Output will be saved to %s\n'''%(cova._utils.timer(start),fout2))
-		out2 = msa.slide_ndiv(window=window,jump=jump,ncpu=ncpu)
-		cova._utils.writecsv(fl=fout2, data=out2)
+	if slide:
+		if cova._utils.outcheck(fout2):
+			print('''%s: Computing diversity within a window sliding over the genome.
+			Output will be saved to %s\n'''%(cova._utils.timer(start),fout2))
+			out2 = msa.slide_ndiv(window=window,jump=jump,ncpu=ncpu)
+			cova._utils.writecsv(fl=fout2, data=out2)
 	
 	print("%s:\t DIV is done."%cova._utils.timer(start))
 

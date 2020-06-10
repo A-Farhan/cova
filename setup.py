@@ -26,11 +26,12 @@ setuptools.setup(name='cova',
         	'matplotlib>=3.1',
         	'numpy>=1.17',
         	'scipy>=1.3',
-        	'seaborn',
-        	'ete3>=3.1.1',
-            'PyQt5',
-        	'joblib>=0.14.0'
+        	'joblib>=0.14.0',
+            'seaborn', 
         ],
+        extras_require={
+            'treeplot':[ 'ete3>=3.1.1', 'PyQt5'],
+        },
         test_suite='nose.collector',
     	tests_require=['nose'],
         package_dir={'cova':'cova'},
@@ -38,6 +39,11 @@ setuptools.setup(name='cova',
         include_package_data=True,
         zip_safe=False,
         entry_points = {
-        'console_scripts': ['CoVa=cova.command_line:cli'],
+        'console_scripts': [
+            'CoVa=cova.command_line:cli', 
+            'preprocess=cova.preprocessing:main_fun',
+            'extract_metadata=cova.extract_metadata:main_fun',
+            'plottree=cova.plottree:main_fun [treeplot]'
+        ],
     }
-    )
+)
