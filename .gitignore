@@ -9,4 +9,7 @@
 .venv/
 
 # directory with external softwares
-/cova/softwares/
+softwares/unpacked/
+
+# directory with build files
+build/
