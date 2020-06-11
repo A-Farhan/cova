@@ -43,12 +43,12 @@ Installation
  
 3. Install the package from the binary distribution. 
 
+   Find the latest release (*.whl) in the release section of cova's github page, Download and run.
+
    .. code-block:: bash
    
-      pip install <repo-path>/dist/*.whl
-      
-   Replace <repo-path> by the full path of your cloned cova repository. 
-
+      pip install <full-path-to-release-file>
+       
 4. Install external programs.
 
    a. ``cd`` to cova repository
