@@ -358,7 +358,7 @@ def genome_var(fin):
 
 	for x in range(N):
 		v = allvs.iat[x]
-		genomes = nsmv['genomes'].iat[x].split(',')
+		genomes = str(nsmv['genomes'].iat[x]).split(',')
 		for genome in genomes:
 			if genome not in genome_vrs.keys():
 				genome_vrs[genome] = [v]
