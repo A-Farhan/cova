@@ -87,6 +87,7 @@ if [ $response == 'y' ]; then
         
 	# install hyphy
         cd $udr/hyphy-2.5.8
+	echo "In the hyphy directory. Running cmake"
         ../cmake-3.17.1-Linux-x86_64/bin/cmake -DCMAKE_INSTALL_PREFIX="$my_path" .
         make -j MP
         make install

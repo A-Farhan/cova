@@ -87,40 +87,61 @@ def main_fun(dr,ftree,fplot,fst,fld,typef,branch_scale,branch_support,show_legen
 	## create treestyle
 	ts = ete3.TreeStyle()
 	ts.show_branch_support = branch_support
-	ts.mode = "c"
+	#ts.mode = "c"
 	ts.scale = branch_scale
 
 	### types #####################################
-	# colors for types
+	# table of genomes and their sequence types
 	typedata = utils.readcsv(fst)
+	# threshold for a type to be shown explicitly in the figure
 	th = len(typedata) * typef
+	# dict of sequence type with isolates
 	type_isols = utils.split_data(data=typedata, ix=1, cixs=0)
+	# empty list of types to be removed
 	rmkeys = []
+	# empty list of such minor isolates
 	minors = [] 
+
+	# for every type and its isolates
 	for k,v in type_isols.items():
+		
+		# if the type is unkown
 		if k == 'U':
+			# skip
 			continue
 		
+		# if no. of isolates for the types are less than the above threshold
 		if len(v) < th:
+			# minor isolates
 			minors.extend(v)
+			# excluded type
 			rmkeys.append(k)
 
+	# type isolate dict with low represetation types excluded
 	type_isols = {k:v for k,v in type_isols.items() if k not in rmkeys}
+	# and added back as minors under type 'O'thers
 	type_isols['O'] = minors
+	# modified table of genome and types
 	typedata = [ [i,k] for k,v in type_isols.items() for i in v] 
+	# dict of isolate and its type if the isolate is present on the tree
 	isol_type = { i[0]:i[1] for i in typedata if i[0] in leaves} 	
+	# color representation of types
 	isol_type_color, type_color = colbyinfo(infodict=isol_type,sorting_func=typesortingfunc)
 	
+	# if a color dict was explicitly provided
 	if typecoldict is not None:
 		tcl = typecoldict.split(',')
 		type_color = { tcl[x]:tcl[x+1] for x in range(0,len(tcl),2)}
 		isol_type_color = { k:type_color[v] for k,v in isol_type.items() }
 
 	for k,v in isol_type_color.items():
+		
 		if v == type_color['U']:
 			isol_type_color[k] = 'white'
-		if v == type_color['O']:
+
+		if 'O' in type_color.keys() and v == type_color['O']:
 			isol_type_color[k] = 'grey'
+
 	type_color['U'] = 'white'
 	type_color['O'] = 'grey'
 	###############################################

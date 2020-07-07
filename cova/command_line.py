@@ -154,15 +154,16 @@ def msaunq( ctx, infile, outfile1, outfile2):
 @cli.command()
 @click.pass_context
 @click.option('--infile',default='genome_aln_unq.fna',show_default=True)
+@click.option('--typefile',default=None,help='Full path to the file with sequence types definition [Optional]')
 @click.option('--outfile',default='genome_types.csv',show_default=True)
-def seqtype( ctx, infile, outfile):
+def seqtype( ctx, infile, typefile, outfile):
 	"""Identify sequence types."""
 	fin = os.path.join(ctx.obj['DR'], infile)
 	fout = os.path.join(ctx.obj['DR'], outfile)
-	
+
 	if cova.utils.outcheck(fout):
 		print("{}: Sequence Typing genomes from {}".format(cova.utils.timer(start),fin))
-		out = [ [k,v] for k,v in cova.genome_seqtype(fin).items()]
+		out = [ [k,v] for k,v in cova.genome_seqtype(fin,fst=typefile).items()]
 		out = sorted(out, key=lambda x: x[1])
 		cova.utils.writecsv(fl=fout,data=out)		
 

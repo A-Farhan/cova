@@ -318,8 +318,21 @@ def parse_fubar(indr,frout,fsout):
 	utils.writecsv(fl=frout, data=rates_out, header=['protein', 'exp_subs','syn', 'nonsyn', 'dnds'])
 	utils.writecsv(fl=fsout, data=sites_out, header=['protein','site','syn', 'nonsyn', 'post_prob'])
 
-def genome_seqtype(fin):
+def genome_seqtype(fin,fst=None):
+    """
+	Return Sequence type of genomes from the input alignment.
+	By default, CoVa's sequence types are used. Optionally, a file can be provided for sequence types.
+    """
+    # biopython multiple sequence alignment
     aln = AlignIO.read(fin,'fasta')
+    
+    # if a sequence type file was provided
+    if fst is not None:
+    	print("A sequence type file was provided. Not using CoVa's standard sequence types")
+    	TYPEPOS, SEQTYPES = utils.readcsv(fl=fst,header=True)
+    	TYPEPOS = [ int(i) for i in TYPEPOS[1:]]
+    	SEQTYPES = { ''.join(i[1:]):i[0] for i in SEQTYPES}
+
     # list of column sequences in the aligment at these positions
     pseqs = [ aln[:,p-1] for p in TYPEPOS]
     # list of row suquences limited to these positions
