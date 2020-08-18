@@ -24,12 +24,12 @@ if [ $response == 'y' ]; then
     if [ ! -s $my_path/bin/mafft ]; then
         
 	# untar the source package
-        if [ ! -d $udr/mafft-7.453-with-extensions ]; then
-            	tar -zvxf $sdr/mafft-7.453-with-extensions-src.tgz -C $udr
+        if [ ! -d $udr/mafft-7.467-with-extensions ]; then
+            	tar -zvxf $sdr/mafft-7.467-with-extensions-src.tgz -C $udr
 	fi
         
 	# edit makefile
-        cd $udr/mafft-7.453-with-extensions/core/
+        cd $udr/mafft-7.467-with-extensions/core/
         echo "Path: `pwd`"
         echo "making a backup copy for the Makefile"
         

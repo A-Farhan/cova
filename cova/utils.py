@@ -94,7 +94,7 @@ Do you want to proceed and rewrite? [y/n]\n'''%path)
             proceed = True
         else:
             raise ValueError('''Inappropriate input! Please respond with [y] to
-proceed and overwrite OR with [n] to skip this protein and retain the MSA file''')
+proceed and overwrite OR with [n] to exit.''')
         
     if not proceed:
         print("okay! Exiting.")

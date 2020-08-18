@@ -1,4 +1,4 @@
-import os, sys, click, ete3, seaborn, matplotlib
+import os, sys, click, ete3, seaborn, matplotlib, pandas
 from time import time
 from . import utils
 
@@ -87,7 +87,7 @@ def main_fun(dr,ftree,fplot,fst,fld,typef,branch_scale,branch_support,show_legen
 	## create treestyle
 	ts = ete3.TreeStyle()
 	ts.show_branch_support = branch_support
-	#ts.mode = "c"
+	ts.mode = "c"
 	ts.scale = branch_scale
 
 	### types #####################################
@@ -148,9 +148,12 @@ def main_fun(dr,ftree,fplot,fst,fld,typef,branch_scale,branch_support,show_legen
 
 	# basic tree style with type annotation
 	for n in t.traverse():
+		
+		# if branch support is less than 0.5, delete the branch
 		if n.support < 0.5:
 			n.delete()
 			continue
+		
 		n.dist = 0.1
 		ns = ete3.NodeStyle()
 		if n.is_leaf():	
@@ -164,34 +167,44 @@ def main_fun(dr,ftree,fplot,fst,fld,typef,branch_scale,branch_support,show_legen
 		n.set_style(ns)
 
 	# If mapping is available, then use it to color leaves and branches
-	if fld is not None:
-		head, dmap = utils.readcsv( fl=fld, header=True)
+	if fld is not None: 
+		dmap = pandas.read_csv(fld)
+		nrow = len(dmap)
+		head = dmap.columns
 
 		# colors for locations
-		isol_loc = { i[0]:i[1] for i in dmap}
+		isol_loc = { dmap.at[x,'accession']:dmap.at[x,'location'] for x in range(nrow)}
 		isol_loc_color, loc_color = colbyinfo(infodict=isol_loc)
 
 		# colors for months
-		isol_month = { i[0]:'-'.join(i[2].split('-')[:2]) for i in dmap if i[2].count('-') == 2}
+		isol_month = { dmap.at[x,'accession']:'-'.join(dmap.at[x,'date'].split('-')[:2]) for x in range(nrow) if dmap.at[x,'date'].count('-') == 2}
 		# months
 		months = sorted( list( set( isol_month.values())))
 		# dict of month names and corresponding key
 		month_key = {}
+		
 		for x,i in enumerate(months):
 			month_key[i] = x+1
+		
 		# replace months with key in the above
 		isol_mkey = { k:month_key[v] for k,v in isol_month.items()}
 		months = sorted( list(set(isol_mkey.values())))
 		nm = len(months)
 		month_colors = seaborn.color_palette('Blues',n_colors=nm)   
 		isol_month_color = {}
+		
 		for k,v in isol_mkey.items():
 			x = months.index(v)
 			c = month_colors[x]
 			isol_month_color[k] = matplotlib.colors.to_hex(c)
 		
 		boxsize = 10*branch_scale/100
+		
 		for n in t.traverse():
+			
+			if n.name not in isol_loc_color.keys():
+				continue
+
 			if n.is_leaf():	
 				rct1 = ete3.RectFace(width=boxsize,height=boxsize,fgcolor='',bgcolor=isol_loc_color[n.name])
 				n.add_face( rct1, column=2, position='aligned')
