@@ -42,6 +42,7 @@ setuptools.setup(name='cova',
         'console_scripts': [
             'CoVa=cova.command_line:cli', 
             'preprocess=cova.preprocessing:main_fun',
+            'replace_gisaid_header=cova.replace_fasta_header_gisaid_accession:main_fun',
             'extract_metadata=cova.extract_metadata:main_fun',
             'plottree=cova.plottree:main_fun [treeplot]'
         ],

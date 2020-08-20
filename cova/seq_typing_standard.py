@@ -32,8 +32,10 @@ def barcode_genomes(aln,pos,m,alpha='ACGT'):
 @click.option('--dr', help='full path to working directory', type=click.Path(), required=True)
 @click.option('--ming', help='minimum no. of genomes to consider a type', type=click.IntRange(min=1))
 @click.option('--ftp', help='full path to the list of barcoding positions', type=click.Path())
+@click.option('--fout', help='output file name', default='seqtype_def.csv', 
+    show_default=True, type=click.Path())
 
-def main_fun(dr,ming,ftp=None):
+def main_fun(dr,ming,fout,ftp=None):
     """Generate sequence types."""
     # start timer
     start = time()
@@ -42,7 +44,7 @@ def main_fun(dr,ming,ftp=None):
     ## paths
     faln = os.path.join( dr, 'genome_aln_unq.fna')
     fmd = os.path.join( dr, 'genome_info.csv')
-    fout = os.path.join( dr, 'seqtype_definition.csv')
+    fout = os.path.join( dr, fout)
     
     # input file checks
     if not os.path.exists(faln):
@@ -51,6 +53,7 @@ def main_fun(dr,ming,ftp=None):
     if not os.path.exists(fmd):
         raise FileNotFoundError("couldn't find the metadata file %s."%fmd)
 
+    # full path to output
     # check if we should proceed in case output is present
     click.echo("Output will be saved to path: %s"%fout)
     if not utils.outcheck(fout):
