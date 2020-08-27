@@ -1,5 +1,6 @@
 ## require
 import os, click
+from shutil import copyfile
 from time import time
 from Bio import SeqIO
 from . import utils, GENOME
@@ -40,14 +41,16 @@ def trim_header_gisaid(fin):
 def add_ref(fin):
 	"""Add reference sequence to a FASTA file of genomes."""
 	recs = list(SeqIO.parse(handle=fin, format='fasta'))
+	ids = [ i.id for i in recs]
 	refrec = GENOME
 	refrec.id = refrec.id.split('.')[0]
 	refrec.name=''
 	refrec.description=''
-	ids = [ i.id for i in recs]
 	
 	if refrec.id not in ids:
 		recs.insert(0, refrec)
+	else:
+		print('\tReference id "%s" already present in the input.'%refrec.id)
 
 	return recs
 
@@ -59,8 +62,9 @@ def add_ref(fin):
 @click.option('--tqual', help='percent threshold of ambiguous characters', default=1, 
 	show_default=True,type=click.FloatRange(min=0, max=100))
 @click.option('--gisaid', help='If sequences were downloaded from GISAID?', is_flag=True)
+@click.option('--noref', help='Do not include reference', is_flag=True)
 
-def main_fun(fin,fout,tqual,gisaid):
+def main_fun(fin,fout,tqual,gisaid,noref):
 	"""Preprocess FASTA file of genomes."""
 	# full path to output	
 	outpath = os.path.join( os.path.dirname(fin), fout)
@@ -81,8 +85,13 @@ def main_fun(fin,fout,tqual,gisaid):
 		SeqIO.write(sequences=rec2, handle='tmp', format='fasta')
 	
 	# add reference
-	rec3 = add_ref(fin='tmp')
-	SeqIO.write(sequences=rec3, handle=outpath, format='fasta')
+	if noref:
+		click.echo("Reference will not be added to the output.")
+		copyfile(src='tmp', dst=outpath)
+	else:
+		click.echo('Adding Reference to the output..')
+		rec3 = add_ref(fin='tmp')
+		SeqIO.write(sequences=rec3, handle=outpath, format='fasta')
 	
 	# clean up
 	os.remove('tmp')
