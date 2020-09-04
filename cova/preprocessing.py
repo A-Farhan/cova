@@ -59,12 +59,14 @@ def add_ref(fin):
 @click.option('--fin', help='FASTA file of genome sequences', type=click.Path(), required=True)
 @click.option('--fout', help='output file name', default='genomes.fna', 
 	show_default=True, type=click.Path())
+@click.option('--ftmp', help='temporary intermediate file name', default='tmp.fna', 
+	show_default=True, type=click.Path())
 @click.option('--tqual', help='percent threshold of ambiguous characters', default=1, 
 	show_default=True,type=click.FloatRange(min=0, max=100))
 @click.option('--gisaid', help='If sequences were downloaded from GISAID?', is_flag=True)
 @click.option('--noref', help='Do not include reference', is_flag=True)
 
-def main_fun(fin,fout,tqual,gisaid,noref):
+def main_fun(fin,fout,ftmp,tqual,gisaid,noref):
 	"""Preprocess FASTA file of genomes."""
 	# full path to output	
 	outpath = os.path.join( os.path.dirname(fin), fout)
@@ -74,25 +76,28 @@ def main_fun(fin,fout,tqual,gisaid,noref):
 	if not utils.outcheck(outpath):
 		return
 
+	# full path to temporary file
+	tmppath = os.path.join( os.path.dirname(fin), ftmp)
+	click.echo("\tIntermediate file path: %s"%tmppath)
 	# remove low quality genomes
 	rec1 = rm_lowqualseq(fin,p=tqual)
-	SeqIO.write(sequences=rec1, handle='tmp', format='fasta')
+	SeqIO.write(sequences=rec1, handle=tmppath, format='fasta')
 	
 	# trim gisaid header	
 	if gisaid:
 		click.echo('Source is GISAID.')
-		rec2 = trim_header_gisaid(fin='tmp')
-		SeqIO.write(sequences=rec2, handle='tmp', format='fasta')
+		rec2 = trim_header_gisaid(fin=tmppath)
+		SeqIO.write(sequences=rec2, handle=tmppath, format='fasta')
 	
 	# add reference
 	if noref:
 		click.echo("Reference will not be added to the output.")
-		copyfile(src='tmp', dst=outpath)
+		copyfile(src=tmppath, dst=outpath)
 	else:
 		click.echo('Adding Reference to the output..')
-		rec3 = add_ref(fin='tmp')
+		rec3 = add_ref(fin=tmppath)
 		SeqIO.write(sequences=rec3, handle=outpath, format='fasta')
 	
 	# clean up
-	os.remove('tmp')
+	os.remove(tmppath)
 	click.echo("%s: Processed output was saved in %s."%(utils.timer(start),outpath))
