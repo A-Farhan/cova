@@ -206,10 +206,13 @@ def n2c(nseq,chars='ACGTU-',thres=90):
     ## checks 
     # length is a multiple of 3
     l = len(nseq)
+    
     if l%3 != 0:
         raise LenSeqError('Sequence length must be a multiple of 3')
+    
     # sequence is largely of unambiguous nucleotides
     pc = sum(i in chars for i in nseq)/l*100
+    
     if pc < thres:
         raise QualSeqError('Sequence has many non-standard characters')
     

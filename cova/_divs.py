@@ -105,7 +105,9 @@ def nucdiv_slide(msa,window,jump,ncpu):
     if len(intervals) == 0:
         return
 
-    pool = multiprocessing.Pool(ncpu)
-    divs = pool.starmap(  nucdiv_inv, [ (msa,i) for i in intervals])
-    pool.close()
+    if ncpu > 1:
+        with multiprocessing.Pool(ncpu) as mp_pool:
+            divs = mp_pool.starmap(  nucdiv_inv, [ (msa,i) for i in intervals])
+    else:
+        divs = [ nucdiv_inv(msa,i) for i in intervals]    
     return divs
