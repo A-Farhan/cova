@@ -7,11 +7,12 @@ start = time.time()
 @click.group(chain=True)
 @click.version_option()
 @click.option('--indr', help='Full path to the working directory', default=os.getcwd(), type=click.Path())
-@click.option('--ncpu', help='number of CPUs to use', default=4, show_default=True, type=int)
+@click.option('--ncpu', help='Number of CPUs to use', default=4, show_default=True, type=int)
+@click.option('--ref', help='Reference sequence accession', default=cova.REF, show_default=True)
 @click.option('--debug', help='See full traceback for errors.', is_flag=True)
 @click.option('--addseq', help='Add new sequences and redo analysis.', is_flag=True)
 @click.pass_context
-def cli(ctx,indr,ncpu,debug,addseq):
+def cli(ctx,indr,ncpu,ref,debug,addseq):
 	"""
 	Variant analysis using whole-genome Multiple Sequence Alignments.
 	By default, it works on the current directory. Directory can be specified using INDR option.
@@ -20,7 +21,7 @@ def cli(ctx,indr,ncpu,debug,addseq):
 	"""
 	ctx.ensure_object(dict)
 	ctx.obj['DR'] = indr
-	ctx.obj['REF'] = cova.REF
+	ctx.obj['REF'] = ref
 	ctx.obj['NCPU'] = str(ncpu)
 	ctx.obj['ADDSEQ'] = addseq
 	# control traceback
