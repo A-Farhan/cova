@@ -1,0 +1,29 @@
+product_accession	feature	class	assembly	assembly_unit	seq_type	chromosome	genomic_accession	start	end	strand	product_accession	non-redundant_refseq	related_accession	name	symbol	GeneID	locus_tag	feature_interval_length	product_length	attributes
+YP_009724389.1	CDS	with_protein	GCF_009858895.2	Primary Assembly	segment		NC_045512.2	266	21555	+	YP_009724389.1			orf1ab	orf1ab	43740578	GU280_gp01	21291	7096.0	ribosomal_slippage
+YP_009725297.1	mat_peptide		GCF_009858895.2	Primary Assembly	segment		NC_045512.2	266	805	+	YP_009725297.1			leader	orf1ab	43740578	GU280_gp01	180	180.0	
+YP_009725298.1	mat_peptide		GCF_009858895.2	Primary Assembly	segment		NC_045512.2	806	2719	+	YP_009725298.1			nsp2	orf1ab	43740578	GU280_gp01	638	638.0	
+YP_009725299.1	mat_peptide		GCF_009858895.2	Primary Assembly	segment		NC_045512.2	2720	8554	+	YP_009725299.1			nsp3	orf1ab	43740578	GU280_gp01	1945	1945.0	
+YP_009725300.1	mat_peptide		GCF_009858895.2	Primary Assembly	segment		NC_045512.2	8555	10054	+	YP_009725300.1			nsp4	orf1ab	43740578	GU280_gp01	500	500.0	
+YP_009725301.1	mat_peptide		GCF_009858895.2	Primary Assembly	segment		NC_045512.2	10055	10972	+	YP_009725301.1			proteinase	orf1ab	43740578	GU280_gp01	306	306.0	
+YP_009725302.1	mat_peptide		GCF_009858895.2	Primary Assembly	segment		NC_045512.2	10973	11842	+	YP_009725302.1			nsp6	orf1ab	43740578	GU280_gp01	290	290.0	
+YP_009725303.1	mat_peptide		GCF_009858895.2	Primary Assembly	segment		NC_045512.2	11843	12091	+	YP_009725303.1			nsp7	orf1ab	43740578	GU280_gp01	83	83.0	
+YP_009725304.1	mat_peptide		GCF_009858895.2	Primary Assembly	segment		NC_045512.2	12092	12685	+	YP_009725304.1			nsp8	orf1ab	43740578	GU280_gp01	198	198.0	
+YP_009725305.1	mat_peptide		GCF_009858895.2	Primary Assembly	segment		NC_045512.2	12686	13024	+	YP_009725305.1			nsp9	orf1ab	43740578	GU280_gp01	113	113.0	
+YP_009725306.1	mat_peptide		GCF_009858895.2	Primary Assembly	segment		NC_045512.2	13025	13441	+	YP_009725306.1			nsp10	orf1ab	43740578	GU280_gp01	139	139.0	
+YP_009725307.1	mat_peptide		GCF_009858895.2	Primary Assembly	segment		NC_045512.2	13442	16236	+	YP_009725307.1			RDRp	orf1ab	43740578	GU280_gp01	932	932.0	
+YP_009725308.1	mat_peptide		GCF_009858895.2	Primary Assembly	segment		NC_045512.2	16237	18039	+	YP_009725308.1			helicase	orf1ab	43740578	GU280_gp01	601	601.0	
+YP_009725309.1	mat_peptide		GCF_009858895.2	Primary Assembly	segment		NC_045512.2	18040	19620	+	YP_009725309.1			exonuclease	orf1ab	43740578	GU280_gp01	527	527.0	
+YP_009725310.1	mat_peptide		GCF_009858895.2	Primary Assembly	segment		NC_045512.2	19621	20658	+	YP_009725310.1			endoRNAse	orf1ab	43740578	GU280_gp01	346	346.0	
+YP_009725311.1	mat_peptide		GCF_009858895.2	Primary Assembly	segment		NC_045512.2	20659	21552	+	YP_009725311.1			methyltransferase	orf1ab	43740578	GU280_gp01	298	298.0	
+YP_009725295.1	CDS	with_protein	GCF_009858895.2	Primary Assembly	segment		NC_045512.2	266	13483	+	YP_009725295.1			orf1a	orf1ab	43740578	GU280_gp01	13218	4405.0	
+YP_009725312.1	mat_peptide		GCF_009858895.2	Primary Assembly	segment		NC_045512.2	13442	13480	+	YP_009725312.1			nsp11	orf1ab	43740578	GU280_gp01	13	13.0	
+YP_009724390.1	CDS	with_protein	GCF_009858895.2	Primary Assembly	segment		NC_045512.2	21563	25384	+	YP_009724390.1			S	S	43740568	GU280_gp02	3822	1273.0	
+YP_009724391.1	CDS	with_protein	GCF_009858895.2	Primary Assembly	segment		NC_045512.2	25393	26220	+	YP_009724391.1			orf3a	ORF3a	43740569	GU280_gp03	828	275.0	
+YP_009724392.1	CDS	with_protein	GCF_009858895.2	Primary Assembly	segment		NC_045512.2	26245	26472	+	YP_009724392.1			E	E	43740570	GU280_gp04	228	75.0	
+YP_009724393.1	CDS	with_protein	GCF_009858895.2	Primary Assembly	segment		NC_045512.2	26523	27191	+	YP_009724393.1			M	M	43740571	GU280_gp05	669	222.0	
+YP_009724394.1	CDS	with_protein	GCF_009858895.2	Primary Assembly	segment		NC_045512.2	27202	27387	+	YP_009724394.1			orf6	ORF6	43740572	GU280_gp06	186	61.0	
+YP_009724395.1	CDS	with_protein	GCF_009858895.2	Primary Assembly	segment		NC_045512.2	27394	27759	+	YP_009724395.1			orf7a	ORF7a	43740573	GU280_gp07	366	121.0	
+YP_009725296.1	CDS	with_protein	GCF_009858895.2	Primary Assembly	segment		NC_045512.2	27756	27887	+	YP_009725296.1			orf7b	ORF7b	43740574	GU280_gp08	132	43.0	
+YP_009724396.1	CDS	with_protein	GCF_009858895.2	Primary Assembly	segment		NC_045512.2	27894	28259	+	YP_009724396.1			orf8	ORF8	43740577	GU280_gp09	366	121.0	
+YP_009724397.2	CDS	with_protein	GCF_009858895.2	Primary Assembly	segment		NC_045512.2	28274	29533	+	YP_009724397.2			N	N	43740575	GU280_gp10	1260	419.0	
+YP_009725255.1	CDS	with_protein	GCF_009858895.2	Primary Assembly	segment		NC_045512.2	29558	29674	+	YP_009725255.1			orf10	ORF10	43740576	GU280_gp11	117	38.0	
