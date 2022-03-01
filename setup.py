@@ -22,7 +22,7 @@ setuptools.setup(name='cova',
         python_requires='>=3.6',
         install_requires=[ 
         	'biopython>=1.75',
-            'pandas>=1.0.5'
+            'pandas>=1.0.5',
         	'click',
         	'matplotlib>=3.1',
         	'numpy>=1.17',

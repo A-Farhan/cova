@@ -2,7 +2,6 @@
 import os, re, numpy, csv, colorsys, math, pandas, multiprocessing
 from time import time
 from itertools import groupby
-from joblib import Parallel, delayed
 from collections import Counter
 from scipy.special import binom
 from Bio import SeqIO, AlignIO
@@ -550,7 +549,8 @@ class MSA(object):
             return out
 
         # run the above function parallely to get p-distances
-        data = Parallel(n_jobs=ncpu) ( delayed(fun) (x,y) for x in range(N) for y in range(N))
+        with multiprocessing.Pool(ncpu) as mp_pool:
+            data = mp_pool.starmap( fun, [ (x,y) for x in range(N) for y in range(N)])
         dmat = numpy.array(data, dtype = float).reshape(N,N)     
 
         return dmat
