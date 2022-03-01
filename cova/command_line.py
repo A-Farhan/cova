@@ -73,8 +73,8 @@ def msabuild(ctx,prog,infile,outfile,mode):
 			cmd = [prog, '--quiet', '--nomemsave', '--maxiterate', '5', '--thread', ctx.obj['NCPU'], fin]
 
 		# run the MAFFT command created above
-		print("%s: Building MSA from %s,\n Command: %s,\n Output will be saved to %s"%(\
-			cova.utils.timer(start),fin,' '.join(cmd),fout))
+		print("%s: Building MSA from %s in %s mode\n Command: %s,\n Output will be saved to %s"%(\
+			cova.utils.timer(start),fin,mode,' '.join(cmd),fout))
 		
 		with open( fout,'w') as flob:
 			s1 = subprocess.run( cmd, stdout=flob, env=my_env)
@@ -120,7 +120,7 @@ def msad(ctx,prog,inmsa,newseq,oldcopy):
 	print("Generating backup for the original MSA")
 	shutil.copy(src=fin1, dst=fcopy)
 	# then run the addseq command: FFT-NS-2
-	cmd = [prog, '--quiet', '--retree', '2', '--thread', ctx.obj['NCPU'], '--add', fin2, fcopy]
+	cmd = [prog, '--quiet', '--auto', '--thread', ctx.obj['NCPU'], '--addfragments', fin2, fcopy]
 	print("%s: Adding sequences from %s to %s,\n Command: %s,\n Output will be saved to %s"%(\
 		cova.utils.timer(start),fin2, fcopy,' '.join(cmd),fout))
 	

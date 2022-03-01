@@ -5,7 +5,7 @@ def readme():
         return f.read()
 
 setuptools.setup(name='cova',
-        version='0.2',
+        version='0.3',
         license='MIT License',
         author='Farhan Ali',
         author_email='afarhan@ncbs.res.in',
