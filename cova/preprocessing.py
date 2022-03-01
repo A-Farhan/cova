@@ -19,7 +19,7 @@ def rm_lowqualseq(fin,p=1):
 	Value: biopython sequence record
 	"""
 	recs = SeqIO.parse(handle=fin, format='fasta')
-	modrecs = [ i for i in recs if utils.is_seq_qual(rec=i, ambt=p)]
+	modrecs = [ i for i in recs if utils.is_seq_qual(seq=i.seq, ambt=p)]
 	return modrecs
 
 def trim_header_gisaid(fin):
@@ -54,6 +54,27 @@ def add_ref(fin):
 
 	return recs
 
+def fix_ids(reclist):
+	"""Fix sequence IDs."""
+	out = []
+	
+	# for every sequence record
+	for i in reclist:
+		
+		# if it's from NCBI, then the accession would be separated with the rest by |
+		if '|' in i.id:
+			print("\tSplitting ID on |")
+			i.id = i.id.split('|')[0]
+		# spaces are removed from the descriptio, if it's gisaid and converted to ID
+		elif ' ' in i.description:
+			print("\tRemoving spaces from Description")
+			i.id = i.description.replace(' ','')
+		else:
+			pass
+
+		out.append(i)
+	return out	
+
 ## Main ##
 @click.command()
 @click.option('--fin', help='FASTA file of genome sequences', type=click.Path(), required=True)
@@ -80,7 +101,11 @@ def main_fun(fin,fout,ftmp,tqual,gisaid,noref):
 	tmppath = os.path.join( os.path.dirname(fin), ftmp)
 	click.echo("\tIntermediate file path: %s"%tmppath)
 	# remove low quality genomes
+	click.echo("Removing low quality genomes at {} % threshold..".format(tqual))
 	rec1 = rm_lowqualseq(fin,p=tqual)
+	# fix ids: remove spaces
+	click.echo("Fixing headers..")
+	rec1 = fix_ids(rec1)
 	SeqIO.write(sequences=rec1, handle=tmppath, format='fasta')
 	
 	# trim gisaid header	

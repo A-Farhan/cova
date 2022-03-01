@@ -1,214 +1,42 @@
 import os, re, subprocess, matplotlib, seaborn, pandas
-from . import utils, FEATURETABLE, GENOME, PROTNAMES, TYPEPOS, SEQTYPES
+from . import utils, FEATURETABLE, GENOME, CODONTABLE, TYPEPOS, SEQTYPES
 from time import time
 from Bio import SeqIO, AlignIO
-from Bio.Align import MultipleSeqAlignment
-from Bio.Data.CodonTable import unambiguous_dna_by_id as codon_table
 
-def rm_genome_w_stopm(fin,fout,finmsa,foutmsa):
-	"""
-	Remove all genomes with non-sense mutations from an input MSA.
-	"""
-	# table of variants
-	vtab = utils.readcsv(fl=fin,sep='\t',header=True)[1]
+def rm_genome_w_stopm(vtab):
+	"""Return a dataframe of genomes with nonsense variants given a 
+	dataframe of genomes with their shared & unique variants."""
 	# dict of genome with their list of variants
-	genome_vrs = { i[0]:i[4].split(',')+i[5].split(',') for i in vtab}
-	# dict of genome with their list of nonsense mutations
-	genome_stopm = {}
-	
-	for k,v in genome_vrs.items():
-		stopms = [ i for i in v if bool(re.search('_[A-Z]\d+\*',i))]
-		if len(stopms) > 0:
-			genome_stopm[k] = ','.join(stopms)
+	vtab['unique'] = vtab['unique'].fillna('')    
+	genome_vrs = vtab[['shared','unique']].apply(axis=1, 
+		func=lambda x: ','.join(x.astype(str))).apply( lambda x: x.split(',')) 
+	# identify genomes w/ stop mutations
+	genome_stopm = genome_vrs.apply(utils.get_stopm)
+	genome_stopm = genome_stopm[genome_stopm!='']
+	return genome_stopm
 
-	# list form of the dict of genomes with nonsense mutations 
-	out = [ [k,v] for k,v in genome_stopm.items()]
-	utils.writecsv(fl=fout, data=out, sep='\t')
-	# input alignment 
-	aln = AlignIO.read(finmsa,'fasta')
-	# list of sequence records with no nonsense mutation
-	alnls = [ i for i in aln if i.id not in genome_stopm.keys()]
-	SeqIO.write(alnls,foutmsa,'fasta')
-
-
-def extract_nucmsa_prots(msa, outdr, rfss=13468, prfs='YP_009725307.1', pepswstop = ['methyltransferase']):
+def extract_nmsa_prots(fmsa,dr):
 	"""
 	Extract nucleotide MSA of proteins from Reference-limited Whole-genome Multiple Sequence Alignment.
 	
 	Arguments:
-	- msa 		- reference-limited Whole-genome Multiple Sequence Alignment (Biopython)
-	- outdr 	- full path to the output directory of MSAs
-	
-	Optional arguments:
-	- rfss 		- 1-indexed ribosomal frameshifting position 	[ 13468 ]
-	- prfs 		- protein affected by the above frameshifting	[ YP_009725307.1' ]
-	- pepswstop 	- list of peptides with stop codons 		[ 'methyltransferase' ]
+	- fmsa 	- path to the reference-limited Whole-genome Multiple Sequence Alignment
+	- dr 	- path to the output directory of extracted MSAs
 	"""
-	## checks
-	# msa is a biopython MSA
-	if type(msa) is not MultipleSeqAlignment:
-		raise TypeError('msa must be a biopython MultipleSeqAlignment.')
+	# biopython multiple sequence alignment
+	msa = AlignIO.read(fmsa, 'fasta')
+	# proteins' end points
+	prot_ends = FEATURETABLE[ ['feature', 'start','end','name']]
+	# apply function to extract CDS MSA
+	out = prot_ends.apply( axis=1, func=lambda x: 
+		utils.extract_cds_msa(p=x.name,pstart=x.start,pstop=x.end,msa=msa)) 
 	
-	# create output directory, if not already present
-	if not os.path.exists(outdr):
-		os.mkdir(outdr)
-		print("%s was not already present. Created now."%outdr)
-
-	# dict of protein ids ( other than of polyproteins) and end points
-	pid_ends = { i[10]:[ i[0], int(i[7]), int(i[8]), PROTNAMES[ i[13] ] ] \
-	for i in FEATURETABLE if i[10] != '' and 'polyprotein' not in i[13]}
-
-	for k,v in pid_ends.items():
-		# output file for subMSA
-		fmout = os.path.join( outdr, v[3]+'.msa')
-	
-		# does the region have stop codon
-		if v[0] == 'CDS':
-			# by default, CDSs have stop codons included
-			has_stop=True
-		# some peptides may have stop codon 
-		elif v[3] in pepswstop:
-			has_stop=True
-		# other extracted sequences won't have stop codons
-		else:
-			has_stop=False
-
-		# for the protein affected by frameshifting
-		if k == prfs:
-			cds = msa[:,v[1]-1:rfss] + msa[:,rfss-1:v[2]]
-			for i in cds:
-				i.description = ''
-			AlignIO.write(alignments=[cds], handle=fmout, format='fasta')					
-		# for regular proteins
-		else:
-			utils.extract_cds(begin=v[1], end=v[2], msa=msa, has_stop=has_stop, outf=fmout)
-
-def annotate_var(fin,fout,ft=FEATURETABLE,genome=GENOME,codon_table=codon_table[1],\
-	rfs_type=-1,rfs_pos=13468,rfs_prot='YP_009725307.1'):
-	"""
-	Annotate point mutations located within protein regions. Identify amino acid changes
-	corresponding to nucleotide changes. The output table is saved to a file and not
-	returned. It is a nested list of lists, where each entry is a list of the following
-	7 elements.
-	- 0 : protein id
-	- 1 : protein name, as present in the reference feature table
-	- 2 : 1-indexed genomic position
-	- 3 : nucleotide variant
-	- 4	: reference codon
-	- 5 : variant codon
-	- 6 : amino acid change
-			A string with 3 components:
-			- reference aa
-			- 1-indexed aa position 
-			- variant aa
-
-	Arguments:
-	- fin 			- full path to input file of point mutations table
-	- fout 			- full path to output file of annotated mutations
-	- ft 			- NCBI reference feature table 
-	- genome 		- NCBI reference assembly genome
-	- codon_table 	- Biopython codon table 	[ Standard]
-	
-	Additional arguments:
-	To account for ribosomal frameshifting present in Coronavirus
-	- rfs_type 		- type 				[ -1 ]
-	- rfs_pos 		- 1-indexed genomic position 	[ 13468 ]
-	- rfs_prot 		- protein id 			[ 'YP_009725307.1' ]
-	"""
-	# list of stop codons
-	stopc = codon_table.stop_codons
-	# point mutations variant table
-	head, vartab = utils.readcsv(fl=fin,sep='\t',header=True) 
-	# list of genomes
-	genomes = head[2:]
-	# subset feature table to columns of interest
-	prot_ftrs = { i[10]:[ int(i[7]), int(i[8]), i[13]] for i in ft if i[0] in ['CDS','mat_peptide'] \
-				and 'polyprotein' not in i[13]}
-
-	## dict of proteins variants and genomes
-	var_genomes = {}
-	# for every row in the variant table
-	for row in vartab:
-		# 1-indexed variant position
-		pos = int(row[0])
-		# reference base
-		rb = row[1]
-		# find the affected protein(s)
-		prots = [ k for k,v in prot_ftrs.items() if v[0] <= pos <= v[1] ]
-		if len(prots) == 0:
-			continue
-
-		# set of tuples( prot, pos, ref, var nuc)
-		pprn = set( ( prot, pos, rb, i) for i in row[2:] if i != rb for prot in prots)
-		# dict with above tuples as keys and list of genome ids as their values
-		entry = { k:[ genomes[x] for x,i in enumerate(row[2:]) if i == k[3] ] for k in pprn}
-		var_genomes.update(entry)
-
-	# list of all variant tuples
-	vtups = list(var_genomes.keys())
-	# dict of protein and their variants
-	prot_vrs = utils.split_data(data=vtups, ix=0, cixs=[0,1,2,3])
-
-	# initialize output table
-	out = []
-	# for every protein and its list of variants
-	for prot, vrs in prot_vrs.items():
-		# list of relevant features of the protein
-		ftrs = prot_ftrs[prot]
-		# 0-indexed ends
-		b = ftrs[0]-1
-		e = ftrs[1]
-
-		# CDS sequence
-		if prot == rfs_prot:
-			cds_seq = genome[b:rfs_pos] + genome[rfs_pos+rfs_type:e]
-		else:
-			cds_seq = genome[b:e]
-		
-		# corresponding list of codons
-		try:
-			codonls = utils.n2c(cds_seq)
-		except utils.LenSeqError:
-			print("\tsequence of {} is not a multiple of 3 ( invalid CDS).".format(ftrs[2].upper()))
-			continue
-
-		# remove the terminal stop codon, if present
-		#if codonls[-1] in stopc:
-		#	codonls = codonls[:-1]
-
-		# for every variant position
-		for nvp in vrs:
-			# 0-index of the genome position
-			genome_x = nvp[1]-1
-			# corresponding index in the CDS
-			if prot == rfs_prot:
-				if genome_x < (rfs_pos-1):
-					cds_x = genome_x - b
-				else:
-					cds_x = genome_x - b - rfs_type
-			else:
-					cds_x = genome_x - b
-			
-			# list of amino acid variant(s)
-			try:
-				avs = utils.nv2av(p=cds_x, v=nvp[3], seq=codonls, codon_table=codon_table)
-			except utils.LenSeqError:
-				print('''Invalid variant {} \n Associated protein's features {}
-					'''.format(nvp,prot_ftrs[prot]))
-				raise 
-
-			# make an entry in the output table
-			entry = [ [ prot, PROTNAMES[ftrs[2]] ] + nvp[1:] + i + [','.join(var_genomes[tuple(nvp)])]\
-				for i in avs]
-			out.extend(entry)
-	
-	# add a column for no. of genomes and one to identify mutation type
-	out = [ row[:-1] + [ 'N' if row[-2][0] != row[-2][-1] else 'S', row[-1].count(',') + 1, row[-1]] \
-	for row in out]
-
-	head = ['protein_id', 'name', 'position', 'ref_base', 'variant_base',\
-			'old_codon','new_codon','aa_change', 'type', 'freq', 'genomes']
-	utils.writecsv(fl=fout,data=out, header=head,sep='\t')
+	# for every item
+	for k,v in out.items():
+		# prepare a file path for the output
+		fout = os.path.join( dr, prot_ends.loc[k,'name']+'.msa')
+		# write the MSA to this path
+		AlignIO.write(alignments=[v], handle=fout, format='fasta')
 
 def run_fubar(fmsa,ftree,outdr,prog):
 	"""
@@ -314,27 +142,28 @@ def parse_fubar(indr,frout,fsout):
 	# further process rates output table	
 	rates_out = [ i + [ round(i[-1]-i[-2],3)] for i in rates_out]
 	rates_out = sorted( rates_out, key=lambda x: x[-1], reverse=True)
+	# convert both to pandas dataframe
+	rates_out = pandas.DataFrame(rates_out,columns=['protein', 'exp_subs','syn', 'nonsyn', 'dnds'])
+	sites_out = pandas.DataFrame(sites_out,columns=['protein','site','syn', 'nonsyn', 'post_prob'])
 	# write both tables to files
-	utils.writecsv(fl=frout, data=rates_out, header=['protein', 'exp_subs','syn', 'nonsyn', 'dnds'])
-	utils.writecsv(fl=fsout, data=sites_out, header=['protein','site','syn', 'nonsyn', 'post_prob'])
+	rates_out.to_csv(frout,index=False)
+	sites_out.to_csv(fsout,index=False)
 
-def genome_seqtype(fin,fst=None,pos=TYPEPOS,sts=SEQTYPES):
+def genome_seqtype(msa,fst=None,pos=TYPEPOS,sts=SEQTYPES):
     """
 	Return Sequence type of genomes from the input alignment.
 	By default, CoVa's sequence types are used. Optionally, a file can be provided for sequence types.
-    """
-    # biopython multiple sequence alignment
-    aln = AlignIO.read(fin,'fasta')
-    
+    """    
     # if a sequence type file was provided
     if fst is not None:
     	print("A sequence type file was provided. Not using CoVa's standard sequence types")
-    	pos, sts = utils.readcsv(fl=fst,header=True)
-    	pos = [ int(i) for i in pos[1:]]
-    	sts = { ''.join(i[1:]):i[0] for i in sts}
-	
+    	sts = pandas.read_csv(fst,index_col=0)
+    	pos = [ int(i) for i in sts.columns]
+    	sts	= sts.apply( axis = 1, func = lambda x: ''.join(x))
+    	sts = dict(zip(sts.values,sts.index))  
+
     # list of column sequences in the aligment at these positions
-    pseqs = [ aln[:,p-1] for p in pos]
+    pseqs = [ msa[:,p-1] for p in pos]
     # list of row suquences limited to these positions
     id_st = {}
     for x,i in enumerate(zip(*pseqs)):
@@ -343,57 +172,32 @@ def genome_seqtype(fin,fst=None,pos=TYPEPOS,sts=SEQTYPES):
     		v = sts[seq] 
     	else:
     		v = 'U'
-    	id_st[ aln[x].id ] = v	
+    	id_st[ msa[x].id ] = v	
     return id_st
 
-def genome_var(fin):
-	"""
-	Write a table of genomes and their shared and unique annotated point mutations.
-
-	Arguments:
-	- fin - full path to the file of annotated variants table
-	- fout - full path to output file
-	"""
-	## checks
-	if not os.path.exists(fin):
-		raise FileNotFoundError("input file %s must be present."%fin)
-	
-	# annotation table
-	van = pandas.read_csv(fin,sep='\t')
+def genome_var(df):
+	"""Return a dataframe of genomes and their shared and unique variants given a dataframe of annotated point mutations."""
 	# only non-synonymous variants
-	nsmv = van[ van.type == 'N']
+	nsmv = df[ df.type == 'N']
 	# no. of such variants
 	N = len(nsmv)
 	# join protein's name and amino acid change
-	allvs = nsmv['name'] + '_' + nsmv['aa_change']
-	# dict of genomes and variants
-	genome_vrs = {}
-
-	for x in range(N):
-		v = allvs.iat[x]
-		genomes = str(nsmv['genomes'].iat[x]).split(',')
-		for genome in genomes:
-			if genome not in genome_vrs.keys():
-				genome_vrs[genome] = [v]
-			else:
-				genome_vrs[genome].append(v)
-		
-	# for every genome, get number and values of all, shared and unique variants
-	genome_vls = {}
-
-	for genome,var in genome_vrs.items():
-		# no. of variants
-		nvs = len(var)
-		
-		# set of variants in other genomes
-		other_vs = set( i for k,v in genome_vrs.items() if k != genome for i in v)
-		# shared variants
-		shared_vs = set(var) & other_vs
-		nsv = len(shared_vs)
-		# unique varuants
-		unq_vs = set(var) - other_vs
-		nuv = len(unq_vs)
-		# make an entry in the dict
-		genome_vls[genome] = [ nvs, nsv, nuv, ','.join(shared_vs), ','.join(unq_vs)]
-
-	return genome_vls
+	var_seqs = nsmv.apply( axis=1, func=lambda x:  
+		pandas.Series( {'var':'_'.join( x[[ 'name','aa_change']]),'seqs':x['genomes'].split(',')}))
+	# dict of variants and the list of sequences with the variant
+	var_seqs = dict(zip(var_seqs['var'],var_seqs['seqs']))
+	# set of all sequences
+	allseqs = set( j for i in var_seqs.values() for j in i)  
+	# initialize a dataframe with variants for rows and sequences for columns
+	var_pa = pandas.DataFrame(index=var_seqs.keys(),columns=allseqs)
+	# fill it with P/A of variant in the sequence
+	var_pa = var_pa.apply( axis=1, func=lambda x: 
+		pandas.Series( int(i in var_seqs[x.name]) for i in allseqs),result_type='broadcast') 
+	# dataframe of shared and unique variants
+	var_su = var_pa.apply(utils.get_shared_unique_elements,df=var_pa).T
+	# dataframe of 
+	var_nsu = var_su.apply( axis=1, func=lambda x: 
+		pandas.Series([ (len(i)>0 and i.count(',')+1 or 0) for i in x],index=['nshared','nunique'])) 
+	var_nsu['total'] = var_nsu.sum(axis=1)
+	outdf = pandas.concat([var_nsu,var_su],axis=1)
+	return outdf

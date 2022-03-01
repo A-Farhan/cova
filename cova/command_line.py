@@ -1,4 +1,4 @@
-import os, sys, shutil, click, subprocess, time, Bio, cova
+import os, sys, shutil, click, subprocess, time, Bio, cova, pandas
 
 # start clock
 start = time.time()
@@ -38,36 +38,56 @@ def cli(ctx,indr,ncpu,ref,debug,addseq):
 	help='''full path to MAFFT program''',show_default=True)
 @click.option('--infile', default='genomes.fna', show_default=True)
 @click.option('--outfile', default='genome_aln.fna', show_default=True)
-@click.option('--maxseq_accuracy', type=int, default=1000, show_default=True)
-def msabuild(ctx,prog,infile,outfile,maxseq_accuracy):
+@click.option('--mode', type=click.Choice(['standard','fast','ultra'],case_sensitive=False),default='standard',show_default=True)
+def msabuild(ctx,prog,infile,outfile,mode):
 	"""Build whole-genome MSA.""" 
 	fin = os.path.join(ctx.obj['DR'],infile)
 	fout = os.path.join(ctx.obj['DR'],outfile)
 	
+	# throw error if input file missing
 	if not os.path.exists(fin):
 		raise FileNotFoundError("couldn't read the input file %s."%fin)
 
 	if cova.utils.outcheck(fout):
+		# get number of sequences in the input
+		nseq = len(Bio.SeqIO.index( fin, 'fasta'))
+		print("%s: Input has %i sequences."%( cova.utils.timer(start), nseq))
+
 		# set path variable to find mafft
 		my_env = os.environ
 		if 'COVA_BIN_PATH' in my_env.keys():
 			my_env['PATH'] = ':'.join([ my_env['COVA_BIN_PATH'], my_env['PATH']])
-
-		# no. of sequences
-		nseqs = len(Bio.SeqIO.index(fin,'fasta'))
-		click.echo("{}: {} sequences found in the input file.".format(cova.utils.timer(start),nseqs))
 		
-		if nseqs < maxseq_accuracy:
-			cmd = [prog, '--quiet', '--nomemsave', '--maxiterate', '5', '--thread', ctx.obj['NCPU'], fin]
-		else:
-			click.echo("\ttoo many sequences! MSABUILD will optimize for speed and run FFT-NS-2.")
+		# create commands for different run modes ( FAST / ULTRA / STANDARD)
+		# FAST
+		if mode == 'fast':
 			cmd = [prog, '--quiet', '--retree', '2', '--thread', ctx.obj['NCPU'], fin]
+		# ULTRA
+		elif mode == 'ultra':
+			# with ULTRA mode, a reference genome file is first placed in the project dir
+			fref = os.path.join(ctx.obj['DR'],'ref.fasta')
+			Bio.SeqIO.write(cova.GENOME,fref,'fasta')
+			cmd = [prog, '--quiet', '--auto', '--thread', ctx.obj['NCPU'], '--keeplength', '--addfragments', fin, fref]
+		# STANDARD
+		else:
+			cmd = [prog, '--quiet', '--nomemsave', '--maxiterate', '5', '--thread', ctx.obj['NCPU'], fin]
 
+		# run the MAFFT command created above
 		print("%s: Building MSA from %s,\n Command: %s,\n Output will be saved to %s"%(\
 			cova.utils.timer(start),fin,' '.join(cmd),fout))
 		
 		with open( fout,'w') as flob:
 			s1 = subprocess.run( cmd, stdout=flob, env=my_env)
+
+		# clean-up for ultra mode
+		if mode == 'ultra':
+			# remove reference file
+			if os.path.exists(fref):
+				os.remove(fref)
+			# remove additional reference seq from MSA
+			msa = Bio.AlignIO.read(fout, 'fasta')
+			msa = msa[1:,:]
+			Bio.AlignIO.write(msa, fout, 'fasta')
 
 	print("%s:\tMSABUILD is done."%cova.utils.timer(start))
 
@@ -103,6 +123,7 @@ def msad(ctx,prog,inmsa,newseq,oldcopy):
 	cmd = [prog, '--quiet', '--retree', '2', '--thread', ctx.obj['NCPU'], '--add', fin2, fcopy]
 	print("%s: Adding sequences from %s to %s,\n Command: %s,\n Output will be saved to %s"%(\
 		cova.utils.timer(start),fin2, fcopy,' '.join(cmd),fout))
+	
 	# rewrite MSA file
 	with open( fout,'w') as flob:
 		s1 = subprocess.run( cmd, stdout=flob, env=my_env)
@@ -117,13 +138,18 @@ def msaref(ctx,infile,outfile):
 	fin = os.path.join(ctx.obj['DR'], infile)
 	fout = os.path.join(ctx.obj['DR'],outfile)
 	
+	# throw error if input missing
 	if not os.path.exists(fin):
 		raise FileNotFoundError("couldn't read the input file %s."%fin)
-		
+	
+	# if output doesn't exist	
 	if cova.utils.outcheck(fout):
-		msa = cova.utils.MSA(fname=fin)
+		# cova MSA object
+		msa = cova.utils.MSA(fname=fin,ref=ctx.obj['REF'])
 		print("{}: Generating reference limited MSA, Output will be saved to {}\n".format(cova.utils.timer(start),fout))
-		out = msa.limref(ref=ctx.obj['REF'])
+		# use its method to limit MSA to a reference sequence
+		out = msa.limref()
+		# write output
 		Bio.AlignIO.write(alignments=[out], handle=fout, format='fasta')
 
 	print("%s:\tMSAREF is done."%cova.utils.timer(start))
@@ -140,15 +166,20 @@ def msaunq( ctx, infile, outfile1, outfile2):
 	fout1 = os.path.join(ctx.obj['DR'],outfile1)
 	fout2 = os.path.join(ctx.obj['DR'],outfile2)
 
+	# throw error if input missing
 	if not os.path.exists(fin):
 		raise FileNotFoundError("couldn't read the input file %s."%fin)
 	
 	if cova.utils.outcheck(fout1):
-		msa = cova.utils.MSA(fname=fin)
+		# cova MSA object
+		msa = cova.utils.MSA(fname=fin,ref=ctx.obj['REF'])
 		print("{}: Removing duplicate sequences from {}\n".format(cova.utils.timer(start),fout1))
-		out1, out2 = msa.rmdup(ref=ctx.obj['REF'])
+		out1, out2 = msa.rmdup()
+		# write alignment to output path
 		Bio.AlignIO.write(alignments=[out1], handle=fout1, format='fasta')
-		cova.utils.writecsv(fl=fout2, data=out2, sep='\t')
+		# write dataframe of genomes retained and their excluded duplicates
+		out2 = pandas.DataFrame(out2)
+		out2.to_csv(fout2,sep='\t',index=False,header=False)
 	
 	print("%s:\tMSAUNQ is done."%cova.utils.timer(start))
 
@@ -164,9 +195,15 @@ def seqtype( ctx, infile, typefile, outfile):
 
 	if cova.utils.outcheck(fout):
 		print("{}: Sequence Typing genomes from {}".format(cova.utils.timer(start),fin))
-		out = [ [k,v] for k,v in cova.genome_seqtype(fin,fst=typefile).items()]
+		# biopython multiple sequence alignment
+		msa = Bio.AlignIO.read(fin,'fasta')
+		# genomes and their sequence types
+		out = [ [k,v] for k,v in cova.genome_seqtype(msa,fst=typefile).items()]
 		out = sorted(out, key=lambda x: x[1])
-		cova.utils.writecsv(fl=fout,data=out)		
+		# covert to df
+		out = pandas.DataFrame(out)
+		# write table to file
+		out.to_csv(fout,header=False,index=False)		
 
 	print("%s:\t SEQTYPE is done."%cova.utils.timer(start))
 
@@ -176,51 +213,66 @@ def seqtype( ctx, infile, typefile, outfile):
 @click.option('--outfp',default='point_mutations.tsv',show_default=True)
 @click.option('--outfd',default='deletions.tsv',show_default=True)
 def vcalpd(ctx,infile,outfp,outfd):
-	"""Call point mutations/deletions from Reference-limited MSA."""
+	"""Call point mutations / deletions from Reference-limited MSA."""
 	fin = os.path.join(ctx.obj['DR'], infile)
 	fout1 = os.path.join(ctx.obj['DR'],outfp)
 	fout2 = os.path.join(ctx.obj['DR'],outfd)
 
+	# throw error if input missing
 	if not os.path.exists(fin):
 		raise FileNotFoundError("couldn't read the input file %s."%fin)
 	
-	msa = cova.utils.MSA(fname=fin)
+	msa = cova.utils.MSA(fname=fin,ref=ctx.obj['REF'])
 	
 	# point mutations	
 	if cova.utils.outcheck(fout1):
 		print("{}: Calling point mutations from {}\n".format(cova.utils.timer(start),fin))
-		tab1,head1 = msa.pointmuts(ref=ctx.obj['REF'],header=True)
-		cova.utils.writecsv(fl=fout1, data=tab1, sep='\t', header=head1)
+		tab1 = msa.pointmuts()
+		tab1.to_csv(fout1,sep='\t',index=False)
 	
 	# deletions
 	if cova.utils.outcheck(fout2):
 		print("{}: Calling deletions from {}\n".format(cova.utils.timer(start),fin))
-		tab2,head2 = msa.dels(ref=ctx.obj['REF'],header=True)
-		cova.utils.writecsv(fl=fout2, data=tab2, sep='\t', header=head2)
+		tab2 = msa.dels()
+		tab2.to_csv(fout2,sep='\t',index=False)
 	
 	print("%s:\t VCALPD is done."%cova.utils.timer(start))
 
 @cli.command()
 @click.pass_context
-@click.option('--infile',default='point_mutations.tsv',show_default=True)
-@click.option('--outfile',default='prot_point_mutations_ann.tsv',show_default=True)
-def annpv(ctx,infile,outfile):
-	"""Annotate point mutations located within protein regions."""
-	fin = os.path.join(ctx.obj['DR'], infile)
-	fout = os.path.join(ctx.obj['DR'],outfile)
+@click.option('--infile1',default='point_mutations.tsv',show_default=True)
+@click.option('--outfile1',default='point_mutations_ann.tsv',show_default=True)
+@click.option('--infile2',default='deletions.tsv',show_default=True)
+@click.option('--outfile2',default='deletions_ann.tsv',show_default=True)
+def anvpd(ctx,infile1,outfile1,infile2,outfile2):
+	"""Annotate point mutations and deletions located within protein regions."""
+	fin1 = os.path.join(ctx.obj['DR'], infile1)
+	fout1 = os.path.join(ctx.obj['DR'],outfile1)
+	fin2 = os.path.join(ctx.obj['DR'], infile2)
+	fout2 = os.path.join(ctx.obj['DR'],outfile2)
 
-	if not os.path.exists(fin):
-		raise FileNotFoundError("couldn't read the input file %s."%fin)
+	# throw error if input missing
+	if not os.path.exists(fin1):
+		raise FileNotFoundError("couldn't read the input file %s."%fin1)
+
+	if not os.path.exists(fin2):
+		raise FileNotFoundError("couldn't read the input file %s."%fin2)
 	
-	if cova.utils.outcheck(fout):
+	# annotate point mutations
+	if cova.utils.outcheck(fout1):
 		print("%s: Annotating point mutations located within protein regions"%cova.utils.timer(start))
-		cova.annotate_var(fin,fout)
+		cova._annotator.annotate_pm(fin1,fout1)
 	
-	print("%s:\t ANNPV is done."%cova.utils.timer(start))
+	# annotate deletions
+	if cova.utils.outcheck(fout2):
+		print("%s: Annotating deletions located within protein regions"%cova.utils.timer(start))
+		cova._annotator.annotate_del(fin2,fout2)
+
+	print("%s:\t ANVPD is done."%cova.utils.timer(start))
 
 @cli.command()
 @click.pass_context
-@click.option('--infile',default='prot_point_mutations_ann.tsv',show_default=True)
+@click.option('--infile',default='point_mutations_ann.tsv',show_default=True)
 @click.option('--outfile',default='genome_vars.tsv',show_default=True)
 def nsvar( ctx, infile, outfile):
 	"""Get shared and unique non-synonymous variants for genomes."""
@@ -229,11 +281,13 @@ def nsvar( ctx, infile, outfile):
 	
 	if cova.utils.outcheck(fout):
 		print("%s: Identifying shared and unique variants"%cova.utils.timer(start))
-		out = [ [k]+v for k,v in cova.genome_var(fin).items()]
-		header = ['id','#var','#shared','#unique','shared','unique']
-		out = sorted(out, key=lambda x: x[1])
-		cova.utils.writecsv(fl=fout,data=out,sep='\t',header=header)		
-
+		# dataframe of annotated variants
+		van = pandas.read_csv(fin,sep='\t')
+		# dataframe of shared and unique variants
+		out = cova.genome_var(van)
+		# write to output path
+		out.to_csv(fout,sep='\t',index_label='id')
+		
 	print("%s:\t NSVAR is done."%cova.utils.timer(start))
 
 @cli.command()
@@ -252,8 +306,19 @@ def rmstop(ctx,infile,outfile,inmsafile,outmsafile):
 	
 	# shall we proceed in case output is present?
 	if cova.utils.outcheck(fout):
+		# table of variants
+		vtab = pandas.read_csv(fin,sep='\t',index_col=0)
 		print("%s: Identifying and removing genomes with non-sense mutations."%cova.utils.timer(start))
-		cova.rm_genome_w_stopm(fin,fout,finmsa,foutmsa)		
+		# dataframe of genomes with nonsense variants
+		out = cova.rm_genome_w_stopm(vtab)
+		# write dataframe to output path
+		out.to_csv(fout, sep='\t',header=False)
+		# input alignment 
+		aln = Bio.AlignIO.read(finmsa,'fasta')
+		# list of sequence records with no nonsense mutation
+		alnls = [ i for i in aln if i.id not in out.index]
+		# write alignment to output path
+		Bio.SeqIO.write(alnls,foutmsa,'fasta')
 
 	print("%s:\t RMSTOP is done."%cova.utils.timer(start))
 
@@ -266,14 +331,18 @@ def msap(ctx,infile,outdr):
 	fin = os.path.join(ctx.obj['DR'], infile)
 	dout = os.path.join(ctx.obj['DR'], outdr)
 
+	# throw error if input missing
 	if not os.path.exists(fin):
 		raise FileNotFoundError("couldn't read the input file %s."%fin)
+	
+	# create output directory, if not already present
+	if not os.path.exists(dout):
+		os.mkdir(dout)
+		print("%s was not already present. Created now."%outdr)
 
-	if cova.utils.outcheck(dout):
-		msa = Bio.AlignIO.read(handle=fin, format='fasta')
-		print('''%s: Extracting nucleotide MSA of proteins from Reference-limited MSA,
-			Outputs will be saved to %s\n.'''%(cova.utils.timer(start),dout))
-		cova.extract_nucmsa_prots(msa=msa, outdr=dout)
+	print('''%s: Extracting nucleotide MSA of proteins from Reference-limited MSA,
+		Outputs will be saved to %s\n.'''%(cova.utils.timer(start),dout))
+	cova.extract_nmsa_prots(fmsa=fin, dr=dout)
 	
 	print("%s:\t MSAP is done."%cova.utils.timer(start))
 
@@ -286,15 +355,16 @@ def vcali(ctx,infile,outfile):
 	fin = os.path.join(ctx.obj['DR'], infile)
 	fout = os.path.join(ctx.obj['DR'],outfile)
 
+	# throw error if input missing
 	if not os.path.exists(fin):
 		raise FileNotFoundError("couldn't read the input file %s."%fin)
 	
 	if cova.utils.outcheck(fout):
-		msa = cova.utils.MSA(fname=fin)
+		msa = cova.utils.MSA(fname=fin,ref=ctx.obj['REF'])
 		print("%s: Calling insertions from MSA , Output will be saved to %s\n"%(cova.utils.timer(start),fout))
-		tab, head = msa.ins( ref=ctx.obj['REF'], header=True)
-		cova.utils.writecsv(fl=fout, data=tab, sep='\t', header=head)
-
+		tab = msa.ins()
+		tab.to_csv(fout,sep='\t',index_label='pos')
+		
 	print("%s:\t VCALI is done."%cova.utils.timer(start))
 
 @cli.command()
@@ -314,27 +384,35 @@ def div(ctx,infile,indr,window,jump,outfile1,outfile2,slide):
 	fout2 = os.path.join(ctx.obj['DR'],outfile2)
 	ncpu = int(ctx.obj['NCPU'])
 
+	# throw error if input missing
 	if not os.path.exists(fin):
 		raise FileNotFoundError("couldn't read the input file %s."%fin)
 	
+	# load alignment as cova MSA object
+	msa = cova.utils.MSA(fname=fin)
+
 	if cova.utils.outcheck(fout1):
 		print('''%s: Computing diversity for whole-genome and peptide-encoding regions.
 		Output will be saved to %s\n'''%(cova.utils.timer(start),fout1))
-		msa = cova.utils.MSA(fname=fin)
 		wndiv = msa.ndiv()
 		fpmsas = [ i for i in os.listdir(din) if i.endswith('.msa')]
 		pndivs = [ [ i.replace('.msa',''), cova.utils.MSA(os.path.join(din,i)).ndiv()] for i in fpmsas]
 		pndivs = [ i for i in pndivs if i[1] is not None]
-		pndivs = sorted(pndivs, key=lambda x: x[1], reverse=True)
+		pndivs = sorted( pndivs, key=lambda x: x[1], reverse=True)
 		out1 = [ ['genome', wndiv] ] + pndivs
-		cova.utils.writecsv(fl=fout1, data=out1)
+		# save dataframe to output file
+		out1 = pandas.DataFrame(out1)
+		out1.to_csv( fout1, index=False, header=False)
 	
+	# to compute diversity over sliding window
 	if slide:
 		if cova.utils.outcheck(fout2):
 			print('''%s: Computing diversity within a window sliding over the genome.
 			Output will be saved to %s\n'''%(cova.utils.timer(start),fout2))
 			out2 = msa.slide_ndiv(window=window,jump=jump,ncpu=ncpu)
-			cova.utils.writecsv(fl=fout2, data=out2)
+			# save dataframe to output file
+			out2 = pandas.DataFrame(out2)
+			out2.to_csv( fout2, index=False, header=False)
 	
 	print("%s:\t DIV is done."%cova.utils.timer(start))
 
@@ -344,10 +422,12 @@ def div(ctx,infile,indr,window,jump,outfile1,outfile2,slide):
 	help='''full path to FASTTREE program''', show_default=True)
 @click.option('--infile', default='genome_aln_sf.fna', show_default=True)
 @click.option('--outfile', default='tree.nwk', show_default=True)
-def tree(ctx,prog,infile,outfile):
+@click.option('--boots', help='''# Bootstrap samples''', default=100, show_default=True, type=int)
+def tree(ctx,prog,infile,outfile,boots):
 	"""Build phyogeny from whole-genome MSA."""
-	fin = os.path.join(ctx.obj['DR'],infile)
-	fout = os.path.join(ctx.obj['DR'],outfile)
+	fin = os.path.join( ctx.obj['DR'], infile)
+	fout = os.path.join( ctx.obj['DR'], outfile)
+	bs = str(boots)
 
 	if not os.path.exists(fin):
 		raise FileNotFoundError("couldn't read the input file %s."%fin)
@@ -356,12 +436,17 @@ def tree(ctx,prog,infile,outfile):
 	if cova.utils.outcheck(fout):
 		my_env = os.environ
 		my_env['OMP_NUM_THREADS'] = ctx.obj['NCPU']
-		# set path variable to find fasttree
+		
+		# set path variable to find FASTTREE
 		if 'COVA_BIN_PATH' in my_env.keys():
 			my_env['PATH'] = ':'.join([ my_env['COVA_BIN_PATH'], my_env['PATH']])
-		cmd = [prog, '-quiet', '-nt', '-mlnni', '4', '-boot', '100', fin]
+		
+		# create FASTTREE command
+		cmd = [prog, '-quiet', '-nt', '-mlnni', '4', '-boot', bs, fin]
 		print("%s: Building Phylogeny from %s,\n Command: %s,\n Output will be saved to %s"%(\
 			cova.utils.timer(start),fin,' '.join(cmd),fout))
+		
+		# run the FASTTREE command create above
 		with open( fout,'w') as flob:
 			s1 = subprocess.run( cmd, stdout=flob, stderr=subprocess.DEVNULL, env=my_env)
 		
@@ -376,17 +461,19 @@ def tree(ctx,prog,infile,outfile):
 @click.option('--outdr', default='fubar', show_default=True)
 @click.option('--outr', default='rates.csv', show_default=True)
 @click.option('--outs', default='sites.csv', show_default=True)
-def sel(ctx,prog,tree,indr,outdr,outr,outs):
+@click.option('--excl', default='orf1a,orf1ab', help='comma-separated list of proteins to be excluded from this analysis.',
+	show_default=True)
+def sel(ctx,prog,tree,indr,outdr,outr,outs,excl):
 	"""Identify sites under positive selection."""
 	ftree = os.path.join(ctx.obj['DR'], tree)
 	din   = os.path.join(ctx.obj['DR'], indr)
 	dout  = os.path.join(ctx.obj['DR'],outdr)
 	frout = os.path.join(ctx.obj['DR'], outr)
 	fsout = os.path.join(ctx.obj['DR'], outs)
-	
+	excl = excl.split(',')
+
 	if not os.path.exists(ftree):
 		raise FileNotFoundError("couldn't read the input tree file %s."%ftree)
-
 	
 	# set path variable to find hyphy
 	my_env = os.environ
@@ -414,7 +501,7 @@ def sel(ctx,prog,tree,indr,outdr,outr,outs):
 		
 		for i in os.listdir(din):
 			
-			if i.endswith('.msa'):
+			if i.endswith('.msa') and i.split('.')[0] not in excl:
 				cova.run_fubar(fmsa=os.path.join(din,i), ftree=ftree, outdr=dout, prog=prog)
 	
 	if cova.utils.outcheck(frout):		
@@ -423,40 +510,59 @@ def sel(ctx,prog,tree,indr,outdr,outr,outs):
 	
 	print("%s:\t SEL is done."%cova.utils.timer(start))
 
+@cli.command()
+@click.pass_context
+@click.option('--excl', default=None, help='list of files to be saved from cleanup [Optional]')
+
+def cleanup(ctx,excl):
+	"""Remove I/O files processed by CoVa present in the working directory."""	
+	# directory
+	dr = ctx.obj['DR']
+	# list of files to be removed from this directory
+	fls = cova.IOF
+	
+	# list of files to be saved from this process
+	if excl is not None:
+		exls = excl.split(',')
+	else:
+		exls = []
+
+	# for each file in the list
+	for f in fls:
+		# full path of the file
+		fp = os.path.join( dr, f)
+		# if this path is to be retained
+		if f in exls:
+			continue
+
+		# if path already exists
+		if os.path.exists(fp):
+			
+			# and if its a directory, remove the directory
+			if os.path.isdir(fp):
+				print("\tDeleting dir: %s"%fp)
+				shutil.rmtree(fp)
+			# else, if it's a file, delete the file
+			else:
+				print("\tDeleting file: %s"%fp)
+				os.remove(fp)
+
+	print("%s:\t CLEANUP is done."%cova.utils.timer(start))
+
 ### command to run all other commands
 @cli.command()
 @click.pass_context
 def full(ctx):
 	"""
 	Run full pipeline.
-	Same as running: CoVa msabuild msaref msaunq seqtype vcalpd annpv nsvar rmstop msap vcali div tree sel
+	Same as running: CoVa msabuild msaref msaunq seqtype vcalpd anvpd nsvar rmstop msap vcali div tree sel
 	"""
 	# if new sequences are to be added
 	if ctx.obj['ADDSEQ']:
 		# add new sequences
 		ctx.forward(msad)
 		# clean up
-		dr = ctx.obj['DR']
-		fls = ['genome_aln_ref.fna', 'genome_aln_unq.fna','genome_aln_sf.fna','prots_nmsa',\
-		'genome_w_stopm.tsv','genome_dups.tsv','genome_types.csv','genome_vars.tsv',\
-		'point_mutations.tsv','deletions.tsv','prot_point_mutations_ann.tsv','insertions.tsv',\
-		'divs.tsv','tree.nwk','fubar','rates.csv','sites.csv']
-		print("%s:Deleting previously generated files"%cova.utils.timer(start))
-		
-		for f in fls:
-			# full path of the file
-			fp = os.path.join( dr, f)
-			
-			# if path already exists
-			if os.path.exists(fp):
-				
-				# and if its a directory, remove the directory
-				if os.path.isdir(fp):
-					shutil.rmtree(fp)
-				# else, if it's a file, delete the file
-				else:
-					os.remove(fp)
-		
+		ctx.invoke(cleanup,excl='genome_aln.fna')
 		print('\t Done with cleanup.')
 	else:
 		ctx.forward(msabuild)
@@ -465,7 +571,7 @@ def full(ctx):
 	ctx.forward(msaunq)
 	ctx.forward(seqtype)
 	ctx.forward(vcalpd)
-	ctx.forward(annpv)
+	ctx.forward(anvpd)
 	ctx.forward(nsvar)
 	ctx.forward(rmstop)
 	ctx.forward(msap)

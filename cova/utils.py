@@ -1,15 +1,14 @@
 ## require
-import os, re, numpy, csv, colorsys, math
+import os, re, numpy, csv, colorsys, math, pandas, multiprocessing
 from time import time
 from itertools import groupby
 from joblib import Parallel, delayed
 from collections import Counter
 from scipy.special import binom
-from Bio import AlignIO
-from Bio.Data.CodonTable import unambiguous_dna_by_id as codon_table
+from Bio import SeqIO, AlignIO
 from Bio.Align import MultipleSeqAlignment
 from Bio.Seq import Seq
-from . import _divs
+from . import _divs, RFS, CODONTABLE, GENOME, REF
 
 ### Exceptions ###
 class LowercaseSeqError(Exception):
@@ -42,43 +41,6 @@ def timer(b=0):
             rthm = round(rth_frac*60)
             out = str(rth)+':'+str(rthm)+':00'
     return out
-
-def readcsv(fl,sep=',',header=None,comments='#'):
-    """
-    Return a nested list of lists from a CSV file. 
-    
-    Arguments:
-    - fl       - full path to input file
-    - sep      - field seperator                                    [ ',' ]  
-    - header   - boolean, if passed, first row is used as a header
-    - comments - lines starting with this character are comments    [ '#' ]
-    """
-    with open(fl) as flob:
-        rdob = csv.reader( filter(lambda x: x[0]!=comments, flob), delimiter=sep )
-        data = [i for i in rdob]
-    if header==True:
-        head = data[0]
-        data = data[1:]
-        return (head,data)
-    else:
-        return data
-
-def writecsv(fl,data,header=None,sep=',',comments='',mode='w'):
-    """
-    Write a nested list of lists to a CSV file. 
-    
-    Arguments:
-    - fl       - full path to output file
-    - data     - nested list of lists
-    - sep      - field seperator                                    [ "," ]  
-    - header   - list of column names for the table                 [ None]
-    - comments - lines to be written before the actual data         [ '#' ]
-    """
-    with open(fl,mode) as flob:
-        flob.write(comments)
-        wrob = csv.writer(flob,delimiter=sep)
-        if header != None: wrob.writerow(header)
-        for i in data: wrob.writerow(i)
 
 def outcheck(path):
     """Decide whether to proceed or not, if output is already present."""
@@ -142,6 +104,11 @@ def list_ep(als,step=1):
     out = []
     # no. of elements
     n = len(als)
+    
+    # if there are no elements, terminate
+    if n == 0:
+        return []
+    
     # last no. stored, initialize with one number less than the first
     lns = als[0]-1
     # for every number
@@ -178,25 +145,86 @@ def list_ep(als,step=1):
         lns = out[-1][1]
     return out
 
-def is_seq_qual(rec,ambt,chars='ACGT'):
+def extract_dates_gisaid_headers(fin):
+    """Return a table of genome accession and their collection dates from gisaid headers of the input FASTA files."""
+    headers = list( SeqIO.index( fin, 'fasta').keys())
+    tab = pandas.DataFrame([ i.split('|') for i in headers],columns=['accession','gisaid','date'])
+    tab = tab[['accession','date']]
+    tab.accession = headers
+    tab = tab.dropna()
+    return tab
+
+def get_recgaps(rec):
+    """Return 0-indexed start and end positions of sequence gaps (-)
+    in a given biopython sequence record."""
+    # no. of sites
+    nsites = len(rec.seq)
+    # list of all gap indices
+    ixs = [ y for y, i in enumerate(rec.seq) if i == '-']
+    # convert above list to a list of 2-tuples marking ranges of consecutive stretches
+    eps = list_ep(ixs)
+    # ignore end deletions
+    eps = [ i for i in eps if not (i[0] == 0 or i[1] == nsites-1)]
+    return eps
+
+def get_recmups(rec,refrec,chars='ACGT'):
+    """
+    Return 0-indexed start and end positions of mutated positions
+    in a given sequence record.
+
+    Arguments:
+    - rec       - biopython sequence record
+    - refrec    - reference sequence record
+    - chars     - string of allowed characters
+    """
+    # no. of sites
+    nsites = len(rec.seq)
+    # list of indices of all variants
+    ixs = [ y for y,i in enumerate(rec.seq) if i != refrec[y] and i in chars]    
+    # convert above list to a list of 2-tuples marking ranges of consecutive stretches
+    eps = list_ep(ixs)    
+    # ignore mutations at either end
+    eps = [ i for i in eps if not (i[0] == 0 or i[1] == nsites-1)]
+    return eps
+
+def get_recins(rec,refrec):
+    """
+    Return 0-indexed start and end positions of insertions in a given sequence record.
+
+    Arguments:
+    - rec       - biopython sequence record from an MSA
+    - refrec    - reference sequence record from the same MSA
+    """
+    # indices of sites where rec has a letter but ref has a gap
+    ixs = [ x for x,i in enumerate(rec) if refrec[x] == '-' and i != '-' ]
+    # convert above list to a list of 2-tuples marking ranges of consecutive stretches
+    eps = list_ep(ixs)
+    return eps
+
+def is_seq_qual(seq,ambt,chars='ACGT'):
     """
     Test if sequence is of good quality based on the proportion of ambiguous characters.
 
     Arguments:
-    - rec   - biopython seqrecord
+    - seq   - a string of letters
     - ambt  - ambiguous characters threshold (%)
     - chars - string of allowed characters
     """
     # no. of sites in the record
-    nsites = len(rec)
+    nsites = len(seq)
     # no. of ambiguous characters
-    rec_ambc = sum([ i not in chars for i in rec.seq])
+    seq_ambc = sum([ i not in chars for i in seq])
     # no. of gaps ( if any)
-    ngaps = rec.seq.count('-')
+    ngaps = seq.count('-')
+    
     # percentage of ambiguous characters
-    rec_ambp = rec_ambc/(nsites-ngaps)*100
+    try:
+        seq_ambp = seq_ambc/(nsites-ngaps)*100
+    except ZeroDivisionError:
+        return False
+
     # boolean output
-    if rec_ambp > ambt:
+    if seq_ambp > ambt:
         return False
     else:
         return True
@@ -219,7 +247,7 @@ def n2c(nseq,chars='ACGTU-',thres=90):
     cseq = [ ''.join(nseq[x:x+3]) for x in range(0,l,3)]
     return cseq
 
-def nv2av(p,v,seq,codon_table=codon_table[1]):
+def nv2av(p,v,seq):
     """
     Generate amino acid variant(s) of a given nucleotide variant.
     
@@ -229,7 +257,6 @@ def nv2av(p,v,seq,codon_table=codon_table[1]):
     - v             - sequence of the variant, a string 
                         of len >= 1
     - seq           - CDS as a list of codons
-    - codon_table   - Biopython codon table                 [ Standard]    
     
     Value:
         a nested list to accomodate changes in the multiple codons
@@ -242,8 +269,8 @@ def nv2av(p,v,seq,codon_table=codon_table[1]):
             3: variant aa
     """
     ## checks
-    # position is integer and non-negative
-    if type(p) is not int or p < 0:
+    # position is non-negative
+    if  p < 0:
         raise ValueError('Position must be a non-negative integer')
     # variant is in capital letters
     var_ucase = v.isupper()
@@ -271,8 +298,8 @@ def nv2av(p,v,seq,codon_table=codon_table[1]):
             pos = {}, variant = {}, CDS length = {}'''.format(p,v,len(seq)*3)) 
 
     # codon table attributes
-    cotab = codon_table.forward_table
-    stopc = codon_table.stop_codons
+    cotab = CODONTABLE.forward_table
+    stopc = CODONTABLE.stop_codons
     
     # variant length
     l = len(v)
@@ -311,51 +338,64 @@ def nv2av(p,v,seq,codon_table=codon_table[1]):
         out.append([ acod, vcod, lab])
     return(out)
 
-def extract_cds(begin,end,msa,has_stop,outf):
+def get_stopm(s):
+    """Return nonsense mutations from a list of amino acid changes."""
+    stopms = [ i for i in s if bool(re.search('_[A-Z]\d+\*',i))]
+    out = ','.join(stopms)
+    return out
+
+def extract_cds_msa(p,pstart,pstop,msa):
     """
     Extract a CDS MSA from a whole-genome (biopython) MSA.
     
     Arguments:
-    - begin     - 1-indexed starting position of the CDS on the MSA
-    - end       - 1-indexed last position of the CDS on the MSA
+    - p         - protein accession
+    - pstart    - 1-indexed starting position of the CDS on the MSA
+    - pstop     - 1-indexed last position of the CDS on the MSA
     - msa       - Whole-genome Biopython MultipleSeqAlignment
-    - has_stop  - boolean, if the terminating stop codon is included
-    - outf      - full path to the output file for alignment
     """
-    ## checks
+    
     # start and end positions are integers
-    if type(begin) is not int or type(end) is not int:
+    if type(pstart) is not int or type(pstop) is not int:
         raise TypeError('end positions must be integers.')
+    
     # msa is a biopython alignment
     if type(msa) is not MultipleSeqAlignment:
         raise TypeError('msa must be a biopython MultipleSeqAlignment.')
-    # end > begin
-    if end <= begin:
-        raise ValueError('end must be greater than begin.')
     
-    # extraction differs based on whether or not the terminating stop codon is included
-    if has_stop:
-        cds = msa[ :, begin-1:end-3]
+    # pstop > pstart
+    if pstop <= pstart:
+        raise ValueError('end must be greater than begin.')
+
+    b = pstart-1
+    e = pstop
+    
+    # for regular proteins 
+    if p not in RFS.index:
+        cds = msa[:,b:e]
+    # for proteins affected by ribosomal slippage
     else:
-        cds = msa[ :, begin-1:end]
+        rfs_pos = RFS.loc[p,'genomic_position']
+        rfs_type = RFS.loc[p,'type']
+        cds = msa[:,b:rfs_pos] + msa[:,rfs_pos+rfs_type:e]
+
+    # remove stop codon if present
+    if cds[0,-3:].seq in CODONTABLE.stop_codons:
+        cds = cds[:,:-3]
+    
     # remove description
     for i in cds:
         i.description = ''
-    # write alignment to file
-    AlignIO.write(alignments=[cds], handle=outf, format='fasta')
+
     return cds
 
-def genome_seqtype(aln):
-    # list of column sequences in the aligment at these positions
-    pseqs = [ aln[:,p-1] for p in TYPEPOS]
-    # list of row suquences limited to these positions
-    id_st = []
-    for x,i in enumerate(zip(*pseqs)):
-        seq = ''.join(i).upper()
-        if seq in SEQTYPES.keys():
-            entry = [ aln[x].id, SEQTYPES[seq] ]
-            id_st.append(entry)
-    return id_st
+def get_shared_unique_elements(s,df):
+    """Return shared and unique elements of a series given a binary dataframe."""
+    b = df[s==1].sum(axis=1)>1
+    p = b[b==True].index.values
+    a = b[b==False].index.values
+    out = pandas.Series([','.join(p),','.join(a)],index=['shared','unique'])
+    return out
 
 # (https://stackoverflow.com/questions/876853/generating-color-ranges-in-python)
 def get_N_HexCol(N):
@@ -366,6 +406,19 @@ def get_N_HexCol(N):
         rgb = map(lambda x: int(x * 255), colorsys.hsv_to_rgb(*rgb))
         hex_out.append('#%02x%02x%02x' % tuple(rgb))
     return hex_out
+
+def parallelize_df(df, func, n_cores=4):
+    """Run a function parallely on a pandas dataframe.
+    Source: https://towardsdatascience.com/make-your-own-super-pandas-using-multiproc-1c04f41944a1
+    """
+    df_split = numpy.array_split(df, n_cores)
+    
+    with multiprocessing.Pool(n_cores) as mp_pool:
+        results = mp_pool.map(func, df_split)
+
+    results = [i for i in results if i is not None]
+    out = pandas.concat(results,ignore_index=True)
+    return out
 
 ##################################################################
 
@@ -378,7 +431,7 @@ class MSA(object):
     To modify alignments, both rowwise and columnwise, as well as to perform 
     variant calling and diversity computations. 
     
-    To initialize, you need to provide full path to an MSA file.
+    To initialize, you need to provide full path to an MSA file. 
 
     Attributes:
     - aln       - Biopython MultipleSeqAlignment object
@@ -400,12 +453,13 @@ class MSA(object):
     - dels           - find deletion variants relative to a reference
     - pointmuts      - find point mutations relative to a reference
     """
-    def __init__(self,fname):
+    def __init__(self,fname,ref=None):
         """
         Initialize a new MSA object.
 
         Arguments:
-        - fname     - full path to input MSA file 
+        - fname     - full path to input MSA file
+        - ref       - reference accession included in the MSA ( Optional) 
         """
         try:
             # read
@@ -421,8 +475,8 @@ class MSA(object):
             # list of sequence ids
             self.ids = [ i.id for i in self.aln]
             # ids must be unique
-            if len(self.ids) != len(set(self.ids)):
-                raise ValueError('sequence IDs must be unique.')
+            #if len(self.ids) != len(set(self.ids)):
+            #    raise ValueError('sequence IDs must be unique.')
 
             # capitalize ( in any case)
             for i in self.aln:
@@ -431,8 +485,7 @@ class MSA(object):
             # numpy array form of the MSA
             self.array = numpy.array( [ list(rec) for rec in self.aln])
             # number of sequences and number of sites
-            self.nseq, self.ncol = self.array.shape
-        
+            self.nseq, self.ncol = self.array.shape        
             # indices of columns with gaps
             self.gaps = [ x for x in range(self.ncol) \
                             if '-' in self.array[:,x]]
@@ -444,6 +497,16 @@ class MSA(object):
                             len( set( self.array[:,x])) > 1]
             # no. of variant sites
             self.ndif = len(self.difs)
+            # reference accession
+            self.ref = ref
+            # if a reference accession was provided
+            if self.ref is not None:
+                # reference record
+                self.refrec = [ i for i in self.aln if i.id == ref][0]
+                # variant records
+                vrecs = pandas.Series( [ i for i in self.aln if i.seq != self.refrec.seq])
+                vrecs.index = [i.id for i in vrecs.values]
+                self.variant_recs = vrecs
         
         except (FileNotFoundError, IsADirectoryError, PermissionError) as ex:
             raise IOError("failed to open the file: %s."%str(ex))
@@ -492,7 +555,7 @@ class MSA(object):
 
         return dmat
     
-    def limref(self,ref):
+    def limref(self):
         """
         Limit MSA to sites present in a given reference. By excluding columns 
         which have gaps in the row corresponding to the reference.
@@ -501,11 +564,11 @@ class MSA(object):
         ## checks
         msa = self.aln
         # ref is present in the MSA
-        if ref not in self.ids:
+        if self.ref not in self.ids:
             raise ValueError('reference must be present in the MSA.')
 
         # reference record
-        refrec = [ i for i in msa if i.id == ref][0]
+        refrec = self.refrec
 
         # check for presence of gaps in the reference record
         # if no gaps, then the alignment is already reference limited
@@ -521,20 +584,16 @@ class MSA(object):
            i.seq = Seq(modseqs[x])  
         return msa
 
-    def rmdup(self,ref=None):
+    def rmdup(self):
         """
         Remove duplicate sequences from the MSA.
-
-        Optional arguments:                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
-        - ref - reference accession [ None ]
-
         If reference is not provided, input is the original biopython MSA
         else, input is the MSA returned by self.limref().
         """
-        if ref is None:
+        if self.ref is None:
             old_msa = self.aln
         else:
-            old_msa = self.limref(ref)
+            old_msa = self.limref()
             
         # list of unq seq records
         unqrec = []
@@ -557,7 +616,7 @@ class MSA(object):
                 genome_dups.append( [rec.id, ','.join(idenrecs)])
         return ( new_msa, genome_dups)
     
-    def ndiv(self,ref=None):
+    def ndiv(self):
         """
         Compute nucleotide diversity:
             Average pairwise difference of sequences per site
@@ -572,45 +631,37 @@ class MSA(object):
         It achieves a substantial speed gain by splitting calculation over columns
         as opposed to first calculating pairwise row differences. 
         """
-        if ref is None:
+        if self.ref is None:
             msa = self.aln
         else:
             msa = self.limref()
         return _divs.nucdiv_aln( msa, t=0)
 
-    def slide_ndiv(self,window,jump,ncpu=1, ref=None):
+    def slide_ndiv(self,window,jump,ncpu=1):
         
-        if ref is None:
+        if self.ref is None:
             aln = self.aln
         else:
-            aln = self.rmdup(ref)[0]
+            aln = self.rmdup()[0]
         
         out = _divs.nucdiv_slide(msa=aln,window=window,jump=jump,ncpu=ncpu)
         return out
 
-    def ins(self,ref,ambt=10,chars='ACGT-',header=False):
+    def ins(self,ambt=10,maxf=0.5):
         """
         Identify positions and sequence of insertions across variants relative to a given reference.
         
             Arguments:
-        - ref     - reference accession
-        - ambt    - ambiguous characters threshold,                 [ 10 (%) ]
-                    used both to check sequence quality,
-                    and to call insertions
-        - chars   - string of expected characters in the msa        [ 'ACGT-']
-        - header  - boolean, if a header should also be returned    [ False  ]       
-        
+        - ambt  - ambiguous characters threshold to keep insertions     [ 10 (%) ]
+        - maxf  - maximum fraction of records at which an insertions 
+                    fails quality check                                 [ 0.5 ]         
         Value:
-        a nested list, to be interpreted as a table, where rows are variant positions.
-        The first two columns are for reference position and allele respectively,
-        and the following columns are for the alleles of other sequences in the MSA.
-
-        if header is True,
-            a 2-tuple (Table,Header)
+        A pandas dataframe with 1 row per variant position and columns for 
+        reference position, allele and variant alleles.
         """
         ## checks
         # ref is present in the MSA
-        if ref not in self.ids:
+        if self.ref not in self.ids:
             raise ValueError('reference must be present in the MSA.')
         # threshold is numeric
         if type(ambt) not in (int,float):
@@ -619,300 +670,123 @@ class MSA(object):
         if ambt < 0:
             raise ValueError('threshold must be non-negative.')
 
-        # MSA
-        msa = self.aln; nseq = self.nseq; nsites = self.ncol
-        # list of genome ids
-        genomes = self.ids
-
         # reference record
-        refx, refrec = [ (x, msa[x]) for x,i in enumerate(genomes) if i == ref][0]
+        refrec = self.refrec
         # reference sequence length
         rlen = len(refrec) - refrec.seq.count('-')
+        # variant records
+        vrecs = self.variant_recs
+        # insertion intervals for every variant record
+        inxs = vrecs.apply( lambda rec: get_recins(rec,refrec))
+        # exclude records w/o insertions
+        inxs = inxs[ inxs.apply(len)>0]
+        # limit variant records to those w insertions
+        vrecs = vrecs[inxs.index]
+        # dataframe of ends of all insertions
+        allis = pandas.DataFrame( set( j for i in inxs for j in i), columns=['start','end'])
+        # corresponding sequences at these positions
+        vseqs = allis.apply( axis=1, func=lambda x: vrecs.apply( 
+        lambda y: str(y.seq[ x['start']-1:x['end']+1])))
+        # find insertion position in the reference
+        # using no. of bases covered on reference before reaching this position on the alignment 
+        vseqs.index = allis.apply( axis=1, func=lambda x: ( sum( j != '-' for j in refrec[:x['start']])-1))
+        # exclude insertions at either ends
+        vseqs = vseqs[~vseqs.index.isin([-1,rlen-1])]
+        # remove gap characters
+        vseqs = vseqs.applymap( lambda x: x.split('-')[0])   
+        # apply quality threshold
+        b = vseqs.applymap( lambda x: is_seq_qual(x,ambt)) 
+        # exclude variants based on majority-consensus
+        vseqs = vseqs[ b.apply(axis=1, func=lambda x: sum(x==False))/b.shape[1] < maxf]
+        # reference sequence at these positions
+        rseq = [ GENOME[x] for x in vseqs.index]
+        # output
+        out = vseqs
+        out.index = out.index+1
+        out['ref'] = rseq
+        out = out.sort_index()
+        out = out[ ['ref']+vrecs.index.tolist()]
+        return out
 
-        # dict of records with insertions relative to the reference
-        rec_ins = {}
-        for c,rec in enumerate(msa):
-            # skip the reference sequence
-            if rec.seq == refrec.seq:
-                #print("\tskipping the reference sequence")
-                continue
-
-            # indices of sites where rec has a letter but ref has a gap
-            ixs = [ x for x,i in enumerate(rec) if refrec[x] == '-' and i != '-' ]
-            # skip, if no insertion sites 
-            if len(ixs) == 0:
-                #print("\tno insertions in %s. Moving on to the next record.."%genomes[c])
-                continue
-
-            # convert above list to a list of 2-tuples marking ranges of consecutive stretches
-            eps = list_ep(ixs)
-
-            for i in eps:
-                # insertion sequence 
-                gapseq = rec[i[0]:i[1]+1].seq
-                l = len(gapseq)
-                # count of ambiguous bases in this sequence
-                ambc = sum(j not in chars for j in gapseq)
-                ambp = round(ambc/l*100)
-                # ignore, if more ambiguous letters than the set threshold
-                if ambp > ambt:
-                    continue
-
-                # find insertion position in the reference
-                # using no. of bases covered on reference before reaching this position on the alignment 
-                rx = sum( j != '-' for j in refrec[:i[0]])-1
-            
-                # ignore end insertions
-                if rx == -1 or rx == rlen-1:
-                    # print("\tIt's an end-point insertion. Skipping!")
-                    continue
-
-                entry = [ (rx, refrec[i[0]-1]), rec[i[0]-1]+str(gapseq)]
-            
-                if rec.id not in rec_ins.keys():
-                    rec_ins[rec.id] = [entry]
-                else:
-                    rec_ins[rec.id].append(entry)
-
-
-        # list of all variants
-        allv = list( set(i[0] for v in rec_ins.values() for i in v))
-        nv = len(allv)
-
-        # initialize output tab with these variants
-        vtab = [ [ allv[r][1] for c in range(nseq) ] for r in range(nv)]
-
-        # go through all variants
-        for x in range(nv):
-            # extract reference position and base
-            pos,base = allv[x]
-            # head, to be added later to this row
-            head = [ pos+1, base]
-            # go through dict of genomes and their variants
-            for k,v in rec_ins.items():
-                # if genome has a variant at this position
-                for i in v:
-                    if allv[x] in i:
-                        # find the genomes.index in the MSA
-                        y = genomes.index(k)
-                        # make an entry in the variant table
-                        vtab[x][y] = i[1]
-                        # stop iterating over this genome's list of variants
-                        break 
-            vtab[x] = head + vtab[x]
-
-        # remove reference from the above table
-        tmp = list(zip(*vtab))
-        tmp = [ i for x,i in enumerate(tmp) if x != refx+2]
-        vtab = list(zip(*tmp))
-        vtab = sorted(vtab, key = lambda x: x[0])
-        if header is False:
-            return vtab
-        else:
-            # header
-            head = ['pos','ref'] + [ i for i in genomes if i != ref]
-            return (vtab,head)
-
-    def dels(self,ref,header=False):
+    def dels(self):
         """
         Identify positions and sequence of deletions across variants relative to a given reference.
-        
-        Arguments:
-        - ref       - reference accession
-        - header    - boolean, if a header should also be returned [ False ]
-        
+
         Value: 
-        a nested list, to be interpreted as a table, where rows are variant positions
-        The first two columns are for reference position and allele respectively,
-        and the following columns are binary representations of Presence/Absence 
-        of the deletion across sequences.
-
-        if header is True,
-            a 2-tuple (Table,Header)
+        a pandas dataframe with 1 row per variant.
+        The first three columns are for reference positions, length and sequence 
+        respectively, and the following columns have P/A across variant genomes.
         """
+        # check that MSA has a reference
+        if self.ref is None:
+            print('''Deletions can not be identified in the absence of a reference.
+                Make sure a value was provided to the <ref> while initializing MSA.''')
+            return
+
         # msa limited to reference positions
-        msa = self.limref(ref)
-        # no. of isolates
-        nseq = self.nseq
-        # no. of sites
-        nsites = len(msa[0])
-
-        # list of genome ids
-        genomes = self.ids
+        msa = self.limref()
         # reference record
-        refrec = [ i for i in msa if i.id == ref][0]
-        # reference index
-        rx = [ x for x,i in enumerate(msa) if i.id == ref][0]
+        refrec = self.refrec
+        # variant records
+        vrecs = self.variant_recs
+        # list of gap indices for these genomes
+        gapxs = vrecs.apply( lambda rec: get_recgaps(rec))
+        # exclude empty entries
+        gapxs = gapxs[ gapxs.apply(len)>0]  
+        # pooled list of all gap intervals
+        allgaps = list( set( j for i in gapxs for j in i))  
+        # binary table of gaps P/A
+        btab = pandas.DataFrame([ [ g in r for r in gapxs] for g in allgaps],
+            columns=gapxs.index).astype(int)
+        # starting position, length & sequence of gaps
+        pls = pandas.DataFrame( [ [ i[0]+1, i[1]-i[0]+1, str(refrec.seq[i[0]:i[1]+1])]
+            for i in allgaps], columns=['pos','len','seq']) 
+        out = pls.T.append(btab.T).T
+        out = out.sort_values(axis=0,by='pos')   
+        return out
 
-        # initialize dict of records and their gaps coordinates
-        rec_gaps = {}
-        for x,rec in enumerate(msa):
-            # skip the reference sequence
-            if rec.seq == refrec.seq:
-                #print("\tskipping the reference sequence")
-                continue
-
-            # list of all gap indices
-            ixs = [ y for y, i in enumerate(rec.seq) if i == '-']
-            # skip, if no gaps
-            if len(ixs) == 0:
-                #print("\t%s has no deletion. Moving on to the next record"%genomes[x])
-                continue
-            # convert above list to a list of 2-tuples marking ranges of consecutive stretches
-            eps = list_ep(ixs)
-            
-            # ignore end deletions
-            eps = [ i for i in eps if not (i[0] == 0 or i[1] == nsites-1)]
-            if len(eps) == 0:
-                #print('''Deletions were only present at sequence ends.
-                #Disregarded as potential sequencing errors''')
-                continue
-
-            rec_gaps[rec.id] = []
-            for i in eps:
-                # stating and ending indices of the gap
-                b = i[0]
-                e = i[1]+1
-                # sequence deleted from the reference
-                delseq = str(refrec.seq[b:e])
-                l = len(delseq)
-
-                entry = (b, delseq, l)
-                rec_gaps[rec.id].append(entry)
-        
-        # set of variant positions and their length
-        vposlen = set( i for v in rec_gaps.values() for i in v)
-        # convert above to a dict
-        pos_lens = split_data(data=vposlen,ix=0,cixs=[1,2])
-        # only keep positions with unique insertions
-        allv = [ (k,v[0][0],v[0][1]) for k,v in pos_lens.items() if len(v) == 1] 
-        nv = len(allv)
-        
-        # initialize output tab with these variants
-        vtab = [ [ 0 for c in range(nseq) ] for r in range(nv)]
-
-        # go through all variants
-        for x in range(nv):
-            # extract reference position, sequence and length
-            pos,seq,l = allv[x]
-            # head, to be added later to this row
-            head = [ pos+1, seq, l]
-            # go through dict of genomes and their variants
-            for k,v in rec_gaps.items():
-                # if genome has a variant at this position
-                if allv[x] in v:
-                    # find the genomes.index in the MSA
-                    y = genomes.index(k)
-                    # make an entry in the variant table
-                    vtab[x][y] = 1
-            vtab[x] = head + vtab[x]
-
-        # remove reference from the above table
-        tmp = list(zip(*vtab))
-        tmp = [ i for x,i in enumerate(tmp) if x != rx+3]
-        vtab = list(zip(*tmp))
-        vtab = sorted(vtab, key = lambda x: x[0])
-        if header is False:
-            return vtab
-        else:
-            # header
-            head = ['pos','ref','len'] + [ i for i in genomes if i != ref]
-            return (vtab,head)
-
-    def pointmuts(self,ref,header=False,chars='ACGT'):
+    def pointmuts(self,chars='ACGT',ambt=10,maxf=0.1):
         """
         Identify positions and sequence of point mutations across variants relative to a given reference
         
         Arguments:
-        - ref       - reference accession
-        - header    - boolean, if a header should also be returned  [ False ]
-        - chars     - string of allowed variant characters          [ 'ACGT']
-        
-        Value: 
-        a nested list, to be interpreted as a table, where rows are variant positions
-        The first two columns are for reference position and allele respectively,
-        and the following columns are for the alleles in rest of the sequences.
+        - chars - string of allowed variant characters                  [ 'ACGT']
+        - ambt  - ambiguous characters threshold to keep a variant      [ 10 (%)]
+        - maxf  - maximum fraction of records at which a variant 
+                    fails quality check                                 [ 0.1   ]         
 
-        if header is True,
-            a 2-tuple (Table,Header)
+        Value: 
+        a pandas dataframe with 1 row per variant position and columns for reference position, 
+        allele, and for the variant alleles.
         """
 
         # msa limited to reference positions
-        msa = self.limref(ref)
-        # no. of isolates
-        nseq = self.nseq
-        # no. of sites
-        nsites = len(msa[0])
-
-        # list of genome ids
-        genomes = self.ids
+        msa = self.limref()
         # reference record
-        refrec = [ i for i in msa if i.id == ref][0]
-        # reference index
-        rx = [ x for x,i in enumerate(msa) if i.id == ref][0]
-
-        ## dict of records and their point mutations
-        rec_pms = {}
-        for x,rec in enumerate(msa):
-            # skip the reference sequence
-            if rec.seq == refrec.seq:
-                #print("\tskipping the reference sequence")
-                continue
-
-            # list of indices of all variants
-            ixs = [ y for y,i in enumerate(rec.seq) if i != refrec[y] and i in chars]    
-            # skip, if no variants
-            if len(ixs) == 0:
-                #print("\tno point mutations in %s. Moving on to the next record.."%genomes[x])
-                continue
-
-            # convert above list to a list of 2-tuples marking ranges of consecutive stretches
-            eps = list_ep(ixs)
-            
-            # ignore mutations at either end
-            eps = [ i for i in eps if not (i[0] == 0 or i[1] == nsites-1)]
-            if len(eps) == 0:
-                #print('''Point mutations were only present at sequence ends. Disregarded as
-                #potential sequencing errors. Skipping this record!''')
-                continue
-
-            rec_pms[rec.id] = eps
-
-        # list of all variant positions
-        allv = list( set( i for v in rec_pms.values() for i in v))
-        nv = len(allv)
-
-        # initialize output tab with these variants
-        vtab = [ [ str(refrec.seq[ allv[r][0]:allv[r][1]+1 ]) for c in range(nseq) ] for r in range(nv)]
-
-        # go through all variants
-        for x in range(nv):
-            # extract reference position
-            pos = allv[x][0]
-            # sequence
-            rseq = vtab[x][0]
-
-            # head, to be added later to this row
-            head = [ pos+1, rseq]
-            # go through dict of genomes and their variants
-            for k,v in rec_pms.items():
-                # if genome has a variant at this position
-                if allv[x] in v:
-                    # find the genomes.index in the MSA
-                    y = genomes.index(k)
-                    # make an entry in the variant table
-                    vtab[x][y] = str(msa[y][ pos:allv[x][1]+1 ].seq)
-            vtab[x] = head + vtab[x]
-
-        # remove reference from the above table
-        tmp = list(zip(*vtab))
-        tmp = [ i for x,i in enumerate(tmp) if x != rx+2]
-        vtab = list(zip(*tmp))
-        vtab = sorted(vtab, key = lambda x: x[0])
-        
-        if header is False:
-            return vtab
-        else:
-            # header
-            head = ['pos','ref'] + [ i for i in genomes if i != ref]
-            return (vtab,head)
+        refrec = self.refrec
+        # variant records
+        vrecs = self.variant_recs
+        # variant position intervals in each record
+        pmxs = vrecs.apply( lambda rec: get_recmups(rec,refrec,chars))
+        # exclude empty entries
+        pmxs = pmxs[ pmxs.apply(len)>0]  
+        # limit variant records to those w substitutions
+        vrecs = vrecs[pmxs.index]
+        # dataframe of ends of all variant positions
+        allvs = pandas.DataFrame( set( j for i in pmxs for j in i), columns=['start','end'])
+        # corresponding sequences at these positions
+        vseqs = allvs.apply( axis=1, func=lambda x: vrecs.apply( 
+        lambda y: str(y.seq[ x['start']:x['end']+1])))
+        # reference sequence at the same positions
+        vseqs['ref'] = allvs.apply( axis=1, func=lambda x: 
+            str(refrec.seq[ x['start']:x['end']+1 ]))
+        # arrange output
+        out = pandas.concat([allvs,vseqs],axis=1)
+        out['pos'] = out.start+1
+        out = out[ ['pos','ref']+vrecs.index.values.tolist()]
+        # apply quality threshold
+        b = out.iloc[:,2:].applymap( lambda x: is_seq_qual(x,ambt))
+        # filter out variants above maxf poor quality calls
+        out = out[ b.apply(axis=1, func=lambda x: sum(x==False))/b.shape[1] < maxf] 
+        out = out.sort_values(by='pos')
+        return out

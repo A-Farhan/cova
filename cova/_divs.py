@@ -1,8 +1,6 @@
-import numpy
+import numpy, multiprocessing
 from scipy import special
-from joblib import Parallel, delayed
 from collections import Counter
-import multiprocessing
 
 def rmc_ef(ar,e,f):   
     """
